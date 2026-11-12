@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+var/
+eval/out/
+.env.*
+!.env.example
+# client documents: local testing only, never commit
+data/real/
+tests/out/
+.qodo/
+*.piimap
