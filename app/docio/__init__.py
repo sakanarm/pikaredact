@@ -74,6 +74,9 @@ def find_leaks(output: bytes, filename: str, originals: list[tuple[str, str]]) -
     texts = [(s.label, _norm(s.text), re.sub(r"\D", "", normalize(s.text))) for s in doc.segments]
     stem = os.path.splitext(os.path.basename(filename))[0]
     texts.append(("ชื่อไฟล์", _norm(stem), re.sub(r"\D", "", normalize(stem))))
+    hidden = getattr(doc, "hidden_texts", None)  # PDF: /ActualText, /Alt… that viewers don't show
+    if hidden:
+        texts += [(lab, _norm(t), re.sub(r"\D", "", normalize(t))) for lab, t in hidden()]
     leaks, seen = [], set()
     for etype, value in originals:
         v = _norm(value).strip()

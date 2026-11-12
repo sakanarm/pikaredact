@@ -118,6 +118,10 @@ class PdfDocument(Document):
             self._plain(f"m_{key}", meta.get(key) or "", f"ข้อมูลไฟล์ · {lab}", "ข้อมูลไฟล์", "metadata", ("meta", key))
         for i, item in enumerate(doc.get_toc(simple=True)):
             self._plain(f"toc{i}", item[1], "สารบัญ (bookmark)", "สารบัญ", "metadata", ("toc", i))
+        # tagged PDFs (Word/PowerPoint export): alt text of figures and abbreviation expansions
+        for x, key, text in _struct_strings(doc, ("Alt", "E")):
+            lab = "ข้อความแทนรูป (Alt)" if key == "Alt" else "คำเต็มของตัวย่อ"
+            self._plain(f"s{x}{key}", text, lab, "ข้อความแฝงใน PDF", "metadata", ("struct", x, key))
         if doc.embfile_count():
             self.warnings.append(f"มีไฟล์แนบใน PDF {doc.embfile_count()} ไฟล์ — ยังไม่ได้ตรวจ และจะถูกลบออกเมื่อเลือกล้างข้อมูลไฟล์")
         if n_images:
@@ -137,13 +141,34 @@ class PdfDocument(Document):
                 continue
             key = (c[0], c[1])
             if key not in groups:
-                groups[key] = [fitz.Rect(c[2]), c[3]]
+                groups[key] = [fitz.Rect(c[2]), c[3], p]
                 order.append(key)
             else:
                 groups[key][0] |= fitz.Rect(c[2])
-        # Thai vowels/tone marks are zero-width boxes on the right edge; MuPDF treats an edge point
-        # as outside, so nudge the right side (less than any real glyph's half-width).
-        return [(k[0], fitz.Rect(r.x0, r.y0, r.x1 + 0.6, r.y1), b) for k in order for r, b in [groups[k]]]
+                groups[key][2] = p
+        out = []
+        for k in order:
+            r, base, last = groups[k]
+            out.append((k[0], fitz.Rect(r.x0, r.y0, r.x1 + PdfDocument._nudge(u, k, last, r.x1), r.y1), base))
+        return out
+
+    @staticmethod
+    def _nudge(u: _PdfUnit, key: tuple, last: int, x1: float) -> float:
+        """How far the box may reach past the last glyph.
+
+        A trailing Thai vowel/tone mark is a zero-width glyph that MuPDF only removes when the box
+        reaches ~0.5pt past it, but MuPDF also removes the next glyph once the box covers ~10% of
+        its width. So reach 0.6pt when a space or nothing follows; otherwise stop safely short of
+        the next glyph (a leftover mark stays hidden under the fill; eating a real letter would not).
+        """
+        q = next((q for q in range(last + 1, len(u.chars))  # skip zero-width marks
+                  if u.chars[q] is None or u.chars[q][2][2] > u.chars[q][2][0]), None)
+        nxt = u.chars[q] if q is not None else None
+        if nxt is None or (nxt[0], nxt[1]) != key or not u.seg.text[q].strip():
+            return 0.6
+        gap = nxt[2][0] - x1
+        width = nxt[2][2] - nxt[2][0]
+        return max(0.0, min(0.6, gap + 0.07 * width))
 
     # ------------------------------------------------------------ outputs
     def render_highlight(self, spans):
@@ -193,6 +218,8 @@ class PdfDocument(Document):
                                 inserts[pno].append((rect, base, new))
                 else:
                     self._apply_other(doc, u, ed)
+            if boxes:
+                drop_actual_text(doc)  # a copy of the original wording, kept outside the drawn glyphs
             for pno, items in boxes.items():
                 page = doc[pno]
                 prepare_page(doc, page)
@@ -259,6 +286,22 @@ class PdfDocument(Document):
             links = page.get_links()
             if i < len(links):
                 page.delete_link(links[i])  # a link pointing at PII is dropped, its visible text is redacted separately
+        elif kind == "struct":
+            _, x, key = u.ref
+            doc.xref_set_key(x, key, fitz.get_pdf_str(new))
+
+    def hidden_texts(self) -> list[tuple[str, str]]:
+        """Text a viewer does not show but a parser reads: /ActualText, /Alt, /E, /T (struct tree and inline)."""
+        doc = _open(self.data)
+        try:
+            out = [(f"ข้อความแฝง /{k}", t) for _, k, t in _struct_strings(doc, ("ActualText", "Alt", "E", "T"))]
+            for page in doc:
+                for x in _content_xrefs(doc, page):
+                    for raw in _inline_strings(doc.xref_stream(x) or b""):
+                        out.append((f"หน้า {page.number + 1} · ข้อความแฝงใน content", raw))
+        finally:
+            doc.close()
+        return out
 
 
 # ---------------------------------------------------------------- TJ workaround
@@ -396,10 +439,85 @@ def split_tj(s: bytes) -> bytes | None:
 
 
 def _char_sig(page: fitz.Page) -> list[tuple]:
-    raw = page.get_text("rawdict", flags=_FLAGS)
+    # glyphs as drawn: tagged PDFs carry /ActualText that extraction would otherwise substitute
+    raw = page.get_text("rawdict", flags=_FLAGS | fitz.TEXT_IGNORE_ACTUALTEXT)
     return [(ch["c"], round(ch["bbox"][0], 1), round(ch["bbox"][1], 1))
             for b in raw.get("blocks", []) if b.get("type") == 0
             for ln in b["lines"] for sp in ln["spans"] for ch in sp["chars"]]
+
+
+def _struct_strings(doc: fitz.Document, keys: tuple[str, ...]):
+    """(xref, key, text) for every object carrying one of these keys as a string (struct tree, marked content)."""
+    for x in range(1, doc.xref_length()):
+        for k in keys:
+            try:
+                typ, text = doc.xref_get_key(x, k)
+                if typ != "string":
+                    continue
+            except Exception:
+                continue
+            if text and text.strip():
+                yield x, k, text
+
+
+_INLINE = re.compile(rb"/(ActualText|Alt|E)(?=[\s(<])\s*")
+
+
+def _inline_spans(s: bytes):
+    """(start, end, raw string) of /ActualText, /Alt, /E strings inside content-stream property dicts."""
+    for m in _INLINE.finditer(s):
+        i = m.end()
+        if s[i:i + 1] == b"(":
+            j = _lit_end(s, i)
+        elif s[i:i + 1] == b"<" and s[i + 1:i + 2] != b"<":
+            j = s.find(b">", i) + 1
+            if j <= 0:
+                continue
+        else:
+            continue
+        yield m.start(), j, s[i:j]
+
+
+def _decode_pdf_string(raw: bytes) -> str:
+    if raw.startswith(b"<"):
+        body = bytes.fromhex(re.sub(rb"[^0-9A-Fa-f]", b"", raw[1:-1]).decode() or "")
+    else:
+        body = re.sub(rb"\\([nrtbf()\\])", lambda m: {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}.get(m.group(1), m.group(1)), raw[1:-1])
+        body = re.sub(rb"\\([0-7]{1,3})", lambda m: bytes([int(m.group(1), 8) & 0xFF]), body)
+    if body[:2] in (b"\xfe\xff", b"\xff\xfe"):
+        return body.decode("utf-16", "replace")
+    if body[:3] == b"\xef\xbb\xbf":
+        return body[3:].decode("utf-8", "replace")
+    return body.decode("latin-1")
+
+
+def _inline_strings(s: bytes) -> list[str]:
+    return [_decode_pdf_string(raw) for _, _, raw in _inline_spans(s)]
+
+
+def drop_actual_text(doc: fitz.Document) -> int:
+    """Remove /ActualText everywhere (struct tree + inline marked content). Returns how many were removed."""
+    n = 0
+    for x, _, _ in list(_struct_strings(doc, ("ActualText",))):
+        doc.xref_set_key(x, "ActualText", "null")
+        n += 1
+    seen = set()
+    for page in doc:
+        for x in _content_xrefs(doc, page):
+            if x in seen:
+                continue
+            seen.add(x)
+            data = doc.xref_stream(x) or b""
+            spans = [(a, b) for a, b, _ in _inline_spans(data) if data[a + 1:a + 11] == b"ActualText"]
+            if spans:
+                out, last = bytearray(), 0
+                for a, b in spans:
+                    out += data[last:a]
+                    last = b
+                out += data[last:]
+                doc.update_stream(x, bytes(out))
+                n += len(spans)
+    return n
 
 
 def _content_xrefs(doc: fitz.Document, page: fitz.Page) -> list[int]:
