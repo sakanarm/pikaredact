@@ -50,6 +50,11 @@ class Profile:
     api_key: str
     model: str
 
+    @property
+    def tag(self) -> str:
+        """Source tag on findings, so review can show which model found what."""
+        return f"llm:{self.name}/{self.model}"
+
 
 def get_profile(name: str | None, model: str | None = None) -> Profile | None:
     profiles = config.llm_profiles()
@@ -153,7 +158,7 @@ def _chunks(segments: list[tuple[Segment, str]], limit: int) -> list[list[tuple[
     return out
 
 
-def _locate(items: list[dict], chunk: list[tuple[Segment, str]]) -> list[Finding]:
+def _locate(items: list[dict], chunk: list[tuple[Segment, str]], tag: str = "llm") -> list[Finding]:
     found = []
     for it in items:
         needle = it["text"]
@@ -165,7 +170,7 @@ def _locate(items: list[dict], chunk: list[tuple[Segment, str]]) -> list[Finding
                 i = norm.find(needle, start)
                 if i < 0:
                     break
-                found.append(Finding(seg.id, i, i + len(needle), seg.text[i:i + len(needle)], it["type"], LLM_SCORE, ["llm"]))
+                found.append(Finding(seg.id, i, i + len(needle), seg.text[i:i + len(needle)], it["type"], LLM_SCORE, [tag]))
                 start = i + len(needle)
     return found
 
@@ -181,7 +186,7 @@ def llm_findings(p: Profile, segments: list[tuple[Segment, str]], progress=None)
     def run(chunk):
         text = "\n".join(norm for _, norm in chunk)
         try:
-            return _locate(complete(p, text), chunk), None
+            return _locate(complete(p, text), chunk, p.tag), None
         except Exception as e:  # network, timeout, bad JSON
             return [], f"{type(e).__name__}"
 
@@ -196,5 +201,5 @@ def llm_findings(p: Profile, segments: list[tuple[Segment, str]], progress=None)
                 progress(done, len(chunks))
     msgs = []
     if warnings:
-        msgs.append(f"AI ตอบไม่สำเร็จ {len(warnings)} จาก {len(chunks)} ช่วง ({', '.join(sorted(set(warnings)))}) — ช่วงนั้นใช้ผลจากกฎและรายชื่อเท่านั้น")
+        msgs.append(f"AI ({p.name}/{p.model}) ตอบไม่สำเร็จ {len(warnings)} จาก {len(chunks)} ช่วง ({', '.join(sorted(set(warnings)))}) — ช่วงนั้นใช้ผลจากกฎและรายชื่อเท่านั้น")
     return out, msgs

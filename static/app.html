@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PikaRedact</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <a class="logo" href="./"><span class="dot"></span>Pika<span class="r">Redact</span></a>
+    <button class="nav active" data-view="scan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>ตรวจเอกสาร</button>
+    <button class="nav" data-view="review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>ตรวจทาน</button>
+    <button class="nav" data-view="restore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>คืนค่าข้อมูล</button>
+    <button class="nav" data-view="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>รายชื่อ</button>
+    <button class="nav" data-view="analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>สถิติ</button>
+    <button class="nav" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>ตั้งค่า</button>
+    <div class="grow"></div>
+    <button class="nav" id="themeBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>สลับโหมดมืด</button>
+  </aside>
+
+  <main class="main">
+    <!-- SCAN -->
+    <section id="v-scan" class="view">
+      <div class="topbar"><h1>ตรวจเอกสาร</h1><span class="muted small" id="engineInfo"></span></div>
+      <div class="page stack" style="max-width:860px">
+        <div class="card">
+          <div class="hd"><h2>เลือกเอกสาร</h2>
+            <div class="tabs" id="srcTabs"><button class="on" data-src="file">ไฟล์</button><button data-src="text">วางข้อความ</button></div>
+          </div>
+          <div class="bd stack">
+            <div id="srcFile">
+              <label class="drop" id="drop">
+                <input type="file" id="file" hidden>
+                <strong id="dropTitle">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</strong>
+                <span class="muted small" id="dropSub"></span>
+              </label>
+            </div>
+            <div id="srcText" class="hidden"><textarea id="text" rows="9" placeholder="วางข้อความที่ต้องการตรวจ"></textarea></div>
+            <div class="stack" style="gap:10px">
+              <label class="check"><input type="checkbox" id="useLlm"> ใช้ AI ช่วยตรวจ (<span id="llmSummary">ยังไม่ได้เลือกโมเดล</span>)</label>
+              <div class="row small" id="combineRow">
+                <span class="muted">เมื่อใช้หลายโมเดล:</span>
+                <label class="check"><input type="radio" name="combine" value="union"> รวมทุกผล (ไม่พลาด)</label>
+                <label class="check"><input type="radio" name="combine" value="vote"> ต้องเห็นตรงกัน ≥ <input class="input" type="number" id="minAgree" min="2" max="6" style="width:62px;padding:2px 8px"> โมเดล</label>
+              </div>
+            </div>
+            <div class="row"><button class="btn primary" id="scanBtn">ตรวจหาข้อมูลส่วนบุคคล</button><span class="muted small">ยังไม่มีการแก้ไขไฟล์ — ตรวจทานก่อนเสมอ</span></div>
+          </div>
+        </div>
+        <div class="card hidden" id="progressCard">
+          <div class="bd stack" style="gap:10px">
+            <div class="row" style="justify-content:space-between"><b id="progStage">กำลังเตรียม…</b><span class="muted small" id="progCount"></span></div>
+            <div class="progress indet" id="progBar"><i></i></div>
+            <div class="notice bad hidden" id="progErr"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- REVIEW -->
+    <section id="v-review" class="view hidden">
+      <div class="topbar">
+        <h1 id="revTitle">ตรวจทาน</h1>
+        <div class="row">
+          <span class="muted small" id="revStats"></span>
+          <button class="btn sm" id="newBtn">ไฟล์ใหม่</button>
+        </div>
+      </div>
+      <div class="page" style="max-width:none">
+        <div id="revEmpty" class="card"><div class="bd muted">ยังไม่มีเอกสาร — เริ่มที่ “ตรวจเอกสาร”</div></div>
+        <div id="revBody" class="hidden stack">
+          <div id="revWarnings" class="stack" style="gap:8px"></div>
+          <div class="review">
+            <div class="card">
+              <div class="hd">
+                <div class="typefilter" id="typeFilter"></div>
+                <label class="check small"><input type="checkbox" id="showAll"> แสดงทุกส่วน</label>
+              </div>
+              <div class="doc" id="doc"></div>
+            </div>
+            <div class="side-panel">
+              <div class="card">
+                <div class="hd"><h2>รายการที่พบ <span class="muted" id="fCount"></span></h2>
+                  <div class="row" style="gap:4px"><button class="btn sm ghost" id="allOn">เลือกทั้งหมด</button><button class="btn sm ghost" id="allOff">ไม่เลือก</button></div>
+                </div>
+                <div class="flist" id="flist"></div>
+                <div class="bd small muted" style="padding:10px 14px">คลิกที่ข้อความเพื่อยกเลิก/เลือก · ลากคลุมข้อความในเอกสารเพื่อเพิ่มเอง</div>
+              </div>
+              <div class="card" id="modelsCard">
+                <div class="hd"><h2>ผลจากแต่ละโมเดล</h2></div>
+                <div class="bd" id="modelsBox" style="padding:6px 18px"></div>
+              </div>
+              <div class="card">
+                <div class="hd"><h2>สร้างไฟล์</h2></div>
+                <div class="bd stack" style="gap:12px">
+                  <div class="choice">
+                    <label><input type="radio" name="action" value="highlight" checked>ไฮไลต์อย่างเดียว<small>ไฟล์เดิม + สีเหลือง + CSV</small></label>
+                    <label><input type="radio" name="action" value="redact">ปิดบังข้อมูล<small>แก้ข้อความในไฟล์จริง</small></label>
+                  </div>
+                  <div id="redactOpts" class="stack hidden" style="gap:10px">
+                    <div class="row"><span class="small muted" style="width:90px">วิธีปิดบัง</span><select id="mode"></select></div>
+                    <details class="small"><summary class="muted" style="cursor:pointer">กำหนดแยกตามประเภท</summary><div id="typeModes" class="stack" style="gap:6px;margin-top:8px"></div></details>
+                    <label class="check small"><input type="checkbox" id="sanitize" checked> ลบข้อมูลแฝง (ผู้เขียน คอมเมนต์ ประวัติแก้ไข)</label>
+                  </div>
+                  <button class="btn blue" id="exportBtn">สร้างไฟล์</button>
+                  <div id="exportOut" class="stack hidden" style="gap:10px"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESTORE -->
+    <section id="v-restore" class="view hidden">
+      <div class="topbar"><h1>คืนค่าข้อมูล</h1></div>
+      <div class="page stack" style="max-width:860px">
+        <div class="notice info">ใช้กับไฟล์ที่ปิดแบบ “แทนด้วยรหัส” — ถอดรหัสไฟล์ .piimap ในเบราว์เซอร์นี้เท่านั้น ไม่ส่งรหัสผ่านหรือข้อมูลขึ้นเซิร์ฟเวอร์</div>
+        <div class="card"><div class="bd stack">
+          <div class="row"><input type="file" id="mapFile" accept=".piimap,application/json"><input class="input" type="password" id="mapPass" placeholder="รหัสผ่านของ .piimap"><button class="btn" id="mapOpen">เปิด</button></div>
+          <div id="mapInfo" class="small muted"></div>
+          <textarea id="restoreIn" rows="8" placeholder="วางข้อความที่มีรหัส เช่น [PERSON_1] (เช่น คำตอบจาก AI)"></textarea>
+          <div class="row"><button class="btn primary" id="restoreBtn">คืนค่า</button></div>
+          <textarea id="restoreOut" rows="8" readonly placeholder="ผลลัพธ์"></textarea>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- LISTS -->
+    <section id="v-lists" class="view hidden">
+      <div class="topbar"><h1>รายชื่อ</h1><button class="btn sm primary" id="listSave">บันทึก</button></div>
+      <div class="page stack" style="max-width:960px">
+        <div class="tabs" id="listTabs"></div>
+        <div class="muted small" id="listHelp"></div>
+        <textarea id="listText" rows="22" spellcheck="false" style="font-family:ui-monospace,Consolas,monospace;font-size:13px"></textarea>
+        <span class="small muted" id="listMsg"></span>
+      </div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section id="v-analytics" class="view hidden">
+      <div class="topbar"><h1>สถิติ</h1>
+        <select id="days"><option value="7">7 วัน</option><option value="30" selected>30 วัน</option><option value="90">90 วัน</option><option value="365">1 ปี</option></select>
+      </div>
+      <div class="page stack" id="stats"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="v-settings" class="view hidden">
+      <div class="topbar"><h1>ตั้งค่า</h1><button class="btn sm primary" id="setSave">บันทึก</button></div>
+      <div class="page stack" style="max-width:960px">
+        <div class="card">
+          <div class="hd"><h2>AI connector และโมเดล</h2><span class="muted small">เลือกได้หลายตัว — จะรันพร้อมกัน</span></div>
+          <div class="bd" id="conns"></div>
+        </div>
+        <div class="card">
+          <div class="hd"><h2>ค่าเริ่มต้น</h2></div>
+          <div class="bd kv">
+            <span>ใช้ AI ช่วยตรวจ</span><label class="check"><input type="checkbox" id="sUseLlm"> เปิดเป็นค่าเริ่มต้น</label>
+            <span>รวมผลหลายโมเดล</span>
+            <div class="row"><select id="sCombine"><option value="union">รวมทุกผล — เน้นไม่พลาด</option><option value="vote">โหวต — ต้องเห็นตรงกัน</option></select>
+              <span class="small muted">อย่างน้อย</span><input class="input" type="number" id="sMinAgree" min="2" max="6" style="width:70px"><span class="small muted">โมเดล</span></div>
+            <span>วิธีปิดบังเริ่มต้น</span><select id="sMode"></select>
+            <span>ลบข้อมูลแฝง</span><label class="check"><input type="checkbox" id="sSanitize"> ผู้เขียน คอมเมนต์ ประวัติแก้ไข</label>
+          </div>
+        </div>
+        <span class="small muted" id="setMsg"></span>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="static/app.js"></script>
+</body>
+</html>

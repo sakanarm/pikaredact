@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PikaRedact</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+<nav class="lp-nav">
+  <span class="logo"><span class="dot"></span>Pika<span class="r">Redact</span></span>
+  <a class="btn primary sm" href="app">เปิดใช้งาน</a>
+</nav>
+
+<section class="lp-hero">
+  <span class="pill">เอกสารไทย · Word · Excel · PowerPoint · PDF</span>
+  <h1>ปิดข้อมูลส่วนบุคคล<br><em>ก่อนส่งเอกสารออกไป</em></h1>
+  <p>อัปโหลดไฟล์ ระบบหาชื่อ เลขบัตร เบอร์โทร บัญชี อีเมล และที่อยู่ให้ คุณตรวจทานเอง แล้วเลือกได้ว่าจะไฮไลต์ให้ดูหรือปิดบังจริง ไฟล์ที่ได้ยังหน้าตาเหมือนเดิม</p>
+  <div class="lp-cta">
+    <a class="btn blue" href="app">เริ่มตรวจเอกสาร</a>
+    <a class="btn" href="#how">ทำงานอย่างไร</a>
+  </div>
+</section>
+
+<div class="lp-demo">
+  <div class="frame">
+    เรียน คุณ<mark class="f" style="--c:#db2777">สมชาย ใจดี</mark> เลขบัตรประชาชน <mark class="f" style="--c:#c2410c">1-1037-02245-12-3</mark>
+    โทร <mark class="f" style="--c:#0369a1">081-234-5678</mark> อีเมล <mark class="f" style="--c:#0e7490">somchai@example.com</mark>
+    <br>→ เรียน คุณ<b>[PERSON_1]</b> เลขบัตรประชาชน <b>[TH_ID_CARD_1]</b> โทร <b>081-xxx-xx78</b> อีเมล <b>████</b>
+  </div>
+</div>
+
+<section class="lp-grid" id="how">
+  <div class="lp-card"><div class="num">1</div><h3>ตรวจหลายชั้น</h3><p>กฎและ checksum สำหรับเลขต่าง ๆ, NLP ภาษาไทยสำหรับชื่อและที่อยู่, รายชื่อที่องค์กรกำหนด และ LLM ภายในเป็นชั้นสุดท้าย</p></div>
+  <div class="lp-card"><div class="num">2</div><h3>หลายโมเดลช่วยกัน</h3><p>ใช้ LLM หลายตัวพร้อมกัน เลือกได้ว่าจะรวมทุกผล (เน้นไม่พลาด) หรือให้โหวตกันก่อน (เน้นแม่น)</p></div>
+  <div class="lp-card"><div class="num">3</div><h3>คนตรวจทานก่อนเสมอ</h3><p>เห็นทุกจุดในเอกสาร กดเพื่อยกเลิก หรือลากคลุมข้อความเพื่อเพิ่มเอง พร้อมบอกว่าเจอด้วยวิธีไหน</p></div>
+  <div class="lp-card"><div class="num">4</div><h3>ไฮไลต์ หรือ ปิดบัง</h3><p>ไฮไลต์สีเหลืองในไฟล์ต้นฉบับพร้อม CSV หรือปิดบังแบบลบ ปิดบางส่วน แทนรหัส (คืนค่าได้) หรือข้อมูลปลอม</p></div>
+</section>
+
+<footer class="lp-foot">ไฟล์อยู่ในหน่วยความจำของเซิร์ฟเวอร์ชั่วคราวและลบอัตโนมัติ · ไม่เก็บค่าข้อมูลส่วนบุคคลไว้ในสถิติ</footer>
+</body>
+</html>

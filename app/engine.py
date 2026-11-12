@@ -9,6 +9,7 @@ import bisect
 import re
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
@@ -40,9 +41,16 @@ def layer_of(source: str) -> str:
         return "list"
     if source.startswith("table:"):
         return "table"
-    if source in ("llm", "propagate", "manual"):
+    if source == "llm" or source.startswith("llm:"):
+        return "llm"
+    if source in ("propagate", "manual"):
         return source
     return "rule"
+
+
+def models_of(f: Finding) -> list[str]:
+    """'profile/model' for every LLM that reported this finding."""
+    return sorted({s[4:] for s in f.sources if s.startswith("llm:")})
 
 
 def primary_layer(f: Finding) -> str:
@@ -214,6 +222,8 @@ def merge(findings: list[Finding], seg_text: dict[str, str]) -> list[Finding]:
             layers = {layer_of(s) for s in f.sources} - {"propagate"}
             if len(layers) >= 2:
                 f.score = min(1.0, f.score + 0.1)
+            if len(models_of(f)) >= 2:  # several models agree
+                f.score = min(1.0, f.score + 0.1)
         # 2. different types overlapping -> strongest wins, the rest keeps only uncovered parts
         unioned.sort(key=lambda f: (-round(f.score, 3), TYPE_PRIORITY.get(f.entity_type, 99), -(f.end - f.start)))
         kept: list[Finding] = []
@@ -245,16 +255,41 @@ class DetectResult:
     findings: list[Finding]
     warnings: list[str] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
-    llm_used: bool = False
+    llm_used: list[str] = field(default_factory=list)   # "profile/model" per model that ran
+    models: list[dict] = field(default_factory=list)    # per model: found, seconds, warnings
+
+
+def _vote(found: list[Finding], min_agree: int) -> list[Finding]:
+    """Keep an LLM-only finding when at least min_agree models (or any other layer) found an overlapping span."""
+    by_seg: dict[str, list[Finding]] = defaultdict(list)
+    for f in found:
+        by_seg[f.seg_id].append(f)
+    out = []
+    for f in found:
+        if layer_of(f.sources[0]) != "llm":
+            out.append(f)
+            continue
+        near = [g for g in by_seg[f.seg_id] if g.start < f.end and f.start < g.end]
+        if any(layer_of(g.sources[0]) != "llm" for g in near):
+            out.append(f)
+        elif len({g.sources[0] for g in near}) >= min_agree:
+            out.append(f)
+    return out
 
 
 def detect(
     segments: list[Segment],
     *,
     profile: Profile | None = None,
+    profiles: list[Profile] | None = None,
+    combine: str = "union",
+    min_agree: int = 2,
     entities: list[str] | None = None,
     progress=None,
 ) -> DetectResult:
+    """profiles: several LLMs run in parallel. combine="union" keeps everything any model found
+    (recall first, +0.1 when two or more agree); combine="vote" keeps an LLM-only finding only when
+    at least min_agree models found it. Rules/lists/NER findings are always kept."""
     t0 = time.perf_counter()
     prog = progress or (lambda stage, done=0, total=0: None)
     segs = [s for s in segments if s.text and s.text.strip()]
@@ -273,14 +308,33 @@ def detect(
     found += table_findings(norm_segs)
     timings["tables"] = time.perf_counter() - t1
 
-    llm_used = False
-    if profile is not None:
+    plist = list(profiles or []) + ([profile] if profile is not None else [])
+    plist = list({p.tag: p for p in plist}.values())
+    models: list[dict] = []
+    if plist:
         t2 = time.perf_counter()
-        prog("llm", 0, 1)
-        res, warn = llm_findings(profile, list(zip(segs, norms)), progress=lambda d, n: prog("llm", d, n))
-        found += res
-        warnings += warn
-        llm_used = True
+        pairs = list(zip(segs, norms))
+        state = {p.tag: (0, 1) for p in plist}
+
+        def on_progress(tag):
+            def cb(d, n):
+                state[tag] = (d, n)
+                prog("llm", sum(a for a, _ in state.values()), sum(b for _, b in state.values()))
+            return cb
+
+        def run(p):
+            t = time.perf_counter()
+            res, warn = llm_findings(p, pairs, progress=on_progress(p.tag))
+            return p, res, warn, time.perf_counter() - t
+
+        prog("llm", 0, len(plist))
+        with ThreadPoolExecutor(max_workers=len(plist)) as ex:
+            for p, res, warn, secs in ex.map(run, plist):
+                found += res
+                warnings += warn
+                models.append({"model": f"{p.name}/{p.model}", "found": len(res), "seconds": round(secs, 2), "failed": bool(warn)})
+        if combine == "vote" and len(plist) >= 2:
+            found = _vote(found, max(2, min(min_agree, len(plist))))
         timings["llm"] = time.perf_counter() - t2
 
     prog("merge")
@@ -300,7 +354,7 @@ def detect(
         f.accepted = f.score >= config.AUTO_ACCEPT_SCORE
     timings["merge"] = time.perf_counter() - t3
     timings["total"] = time.perf_counter() - t0
-    return DetectResult(final, warnings, {k: round(v, 3) for k, v in timings.items()}, llm_used)
+    return DetectResult(final, warnings, {k: round(v, 3) for k, v in timings.items()}, [m["model"] for m in models], models)
 
 
 def detect_text(text: str, **kw) -> tuple[list[Segment], DetectResult]:
