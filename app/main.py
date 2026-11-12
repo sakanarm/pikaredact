@@ -55,7 +55,8 @@ class Job:
     error: str = ""
     result: object = None
     options: dict = field(default_factory=dict)
-    files: dict = field(default_factory=dict)   # name -> (bytes, media type)
+    files: dict = field(default_factory=dict)   # name -> (bytes, media type), every output made so far
+    outputs: dict = field(default_factory=dict)  # "highlight" | "redact" -> export summary (no values, no mapping)
     seconds: float = 0.0
 
 
@@ -79,16 +80,30 @@ def _job(job_id: str) -> Job:
 
 
 # ---------------------------------------------------------------- settings & stats
-DEFAULT_SETTINGS = {"profiles": [], "combine": "union", "min_agree": 2, "mode": "token", "sanitize": True, "use_llm": False}
+DEFAULT_SETTINGS = {
+    "profiles": [], "combine": "union", "min_agree": 2, "mode": "token", "sanitize": True, "use_llm": False,
+    "models": {},                 # connector name -> chosen model
+    "default_connector": "",      # connector name or "none"
+    "layers": {"ner": True, "list": True},
+    "type_modes": {},             # entity type -> mode; missing = follow the mode picked in review
+    "types_off": ["DATE_OF_BIRTH"],
+    "default_output": "ask",      # ask | redact | highlight
+}
 
 
 def load_settings() -> dict:
-    s = dict(DEFAULT_SETTINGS)
-    if not s["profiles"] and config.default_llm_profile():
-        p = config.llm_profiles()[config.default_llm_profile()]
-        s["profiles"] = [{"name": p["name"], "model": p["model"]}]
+    s = json.loads(json.dumps(DEFAULT_SETTINGS))
+    envp = config.llm_profiles()
+    s["models"] = {k: p["model"] for k, p in envp.items() if p["model"]}
+    default = config.default_llm_profile()
+    if default:
+        s["profiles"] = [{"name": default, "model": envp[default]["model"]}]
+    s["default_connector"] = default or "none"
     try:
-        s.update(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")))
+        saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        if isinstance(saved.get("models"), dict):
+            s["models"].update(saved.pop("models"))
+        s.update(saved)
     except (OSError, ValueError):
         pass
     return s
@@ -98,16 +113,19 @@ def _db():
     con = sqlite3.connect(STATS_DB)
     con.execute("""create table if not exists events(ts real, kind text, ext text, seconds real, findings int,
                    by_type text, by_layer text, models text, action text, mode text, leaks int)""")
+    cols = {r[1] for r in con.execute("pragma table_info(events)")}
+    if "extra" not in cols:
+        con.execute("alter table events add column extra text default '{}'")
     return con
 
 
 def _record(**kw):
     try:
         with _db() as con:
-            con.execute("insert into events values(?,?,?,?,?,?,?,?,?,?,?)",
+            con.execute("insert into events values(?,?,?,?,?,?,?,?,?,?,?,?)",
                         (time.time(), kw.get("kind"), kw.get("ext"), kw.get("seconds", 0), kw.get("findings", 0),
                          json.dumps(kw.get("by_type", {})), json.dumps(kw.get("by_layer", {})), json.dumps(kw.get("models", [])),
-                         kw.get("action", ""), kw.get("mode", ""), kw.get("leaks", 0)))
+                         kw.get("action", ""), kw.get("mode", ""), kw.get("leaks", 0), json.dumps(kw.get("extra", {}))))
     except sqlite3.Error:
         pass
 
@@ -119,14 +137,25 @@ def _warm():
 
 
 # ---------------------------------------------------------------- pages
+def _asset_version() -> str:
+    """Cache-buster for static assets: changes whenever any file under static/ changes."""
+    newest = max((p.stat().st_mtime_ns for p in STATIC.rglob("*") if p.is_file()), default=0)
+    return format(newest // 1_000_000, "x")
+
+
+def _page(name: str) -> Response:
+    html = (STATIC / name).read_text(encoding="utf-8").replace("__V__", _asset_version())
+    return Response(html, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/", include_in_schema=False)
 def landing():
-    return FileResponse(STATIC / "index.html")
+    return _page("index.html")
 
 
 @app.get("/app", include_in_schema=False)
 def app_page():
-    return FileResponse(STATIC / "app.html")
+    return _page("app.html")
 
 
 @app.get("/health")
@@ -136,7 +165,10 @@ def health():
 
 # ---------------------------------------------------------------- config / settings / llm
 def _profiles_public() -> list[dict]:
-    return [{"name": p["name"], "model": p["model"]} for p in config.llm_profiles().values()]
+    """Names and env var names only: base URLs and keys never leave the server."""
+    return [{"name": p["name"], "model": p["model"], "env_url": f"LLM_{p['name'].upper()}_BASE_URL",
+             "env_key": f"LLM_{p['name'].upper()}_API_KEY", "has_key": bool(p["api_key"])}
+            for p in config.llm_profiles().values()]
 
 
 @app.get("/api/config")
@@ -144,7 +176,11 @@ def api_config():
     return {
         "entity_types": ENTITY_TYPES, "modes": MODES, "layers": LAYER_LABELS, "supported": SUPPORTED,
         "max_upload_mb": config.MAX_UPLOAD_MB, "review_score": config.REVIEW_SCORE,
-        "profiles": _profiles_public(), "settings": load_settings(), "ttl_minutes": config.JOB_TTL_SECONDS // 60,
+        "min_score": config.MIN_SCORE, "auto_accept_score": config.AUTO_ACCEPT_SCORE,
+        "llm": {"temperature": 0, "chunk_chars": config.LLM_CHUNK_CHARS, "concurrency": config.LLM_CONCURRENCY,
+                "timeout": config.LLM_TIMEOUT, "verify_tls": config.LLM_VERIFY_TLS},
+        "profiles": _profiles_public(), "default_profile": config.default_llm_profile(),
+        "settings": load_settings(), "ttl_minutes": config.JOB_TTL_SECONDS // 60,
         "lists": {k: v[1] for k, v in gazetteer.LIST_FILES.items()},
     }
 
@@ -171,6 +207,20 @@ async def put_settings(request: Request):
     for k in ("sanitize", "use_llm"):
         if k in body:
             s[k] = bool(body[k])
+    if isinstance(body.get("models"), dict):
+        s["models"].update({str(k).lower(): str(v)[:200] for k, v in body["models"].items() if str(k).lower() in known})
+    if "default_connector" in body:
+        d = str(body["default_connector"]).lower()
+        if d in known or d == "none":
+            s["default_connector"] = d
+    if isinstance(body.get("layers"), dict):
+        s["layers"] = {k: bool(body["layers"].get(k, True)) for k in ("ner", "list")}
+    if isinstance(body.get("type_modes"), dict):
+        s["type_modes"] = {k: v for k, v in body["type_modes"].items() if k in ENTITY_TYPES and k != "SECRET" and v in MODES}
+    if isinstance(body.get("types_off"), list):
+        s["types_off"] = [t for t in body["types_off"] if t in ENTITY_TYPES and t != "SECRET"]
+    if body.get("default_output") in ("ask", "redact", "highlight"):
+        s["default_output"] = body["default_output"]
     SETTINGS_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
     return s
 
@@ -206,7 +256,13 @@ async def api_test(request: Request):
 def get_list(name: str):
     if name not in gazetteer.LIST_FILES:
         raise HTTPException(404)
-    return {"name": name, "content": gazetteer.read_list(name)}
+    content = gazetteer.read_list(name)
+    count = sum(1 for line in content.splitlines() if line.strip() and not line.lstrip().startswith("#"))
+    try:
+        updated = gazetteer.list_path(name).stat().st_mtime
+    except OSError:
+        updated = None
+    return {"name": name, "content": content, "count": count, "updated": updated}
 
 
 @app.put("/api/lists/{name}")
@@ -237,7 +293,8 @@ def _run(job: Job):
     try:
         opts = job.options
         res = detect(job.doc.segments, profiles=_profiles_for(opts) if opts.get("use_llm") else None,
-                     combine=opts.get("combine", "union"), min_agree=int(opts.get("min_agree", 2)), progress=prog)
+                     combine=opts.get("combine", "union"), min_agree=int(opts.get("min_agree", 2)),
+                     entities=opts.get("entities"), layers=opts.get("layers"), progress=prog)
         job.result = res
         job.status = "done"
         job.seconds = time.perf_counter() - t0
@@ -271,7 +328,9 @@ async def create_job(file: UploadFile | None = File(None), text: str = Form(""),
     except Exception as e:
         raise HTTPException(400, f"เปิดไฟล์ไม่ได้ ({type(e).__name__}) — ไฟล์อาจเสียหรือมีรหัสผ่าน")
     s = load_settings()
-    merged = {k: opts.get(k, s[k]) for k in ("profiles", "combine", "min_agree", "use_llm")}
+    merged = {k: opts.get(k, s[k]) for k in ("profiles", "combine", "min_agree", "use_llm", "layers", "sanitize")}
+    off = set(s.get("types_off") or [])
+    merged["entities"] = [t for t in ENTITY_TYPES if t not in off]
     job = Job(uuid.uuid4().hex, name, doc, options=merged)
     with _lock:
         JOBS[job.id] = job
@@ -291,7 +350,9 @@ def _finding_json(f: Finding) -> dict:
 def get_job(job_id: str):
     j = _job(job_id)
     out = {"id": j.id, "filename": j.filename, "status": j.status, "stage": j.stage, "done": j.done, "total": j.total,
-           "error": j.error, "kind": j.doc.kind, "ext": j.doc.ext, "highlight_ext": getattr(j.doc, "highlight_ext", j.doc.ext)}
+           "error": j.error, "kind": j.doc.kind, "ext": j.doc.ext, "highlight_ext": getattr(j.doc, "highlight_ext", j.doc.ext),
+           "created": j.created, "expires": j.created + config.JOB_TTL_SECONDS, "options": {
+               k: j.options.get(k) for k in ("use_llm", "profiles", "combine", "layers", "sanitize")}}
     if j.status == "done":
         r = j.result
         out.update({
@@ -299,6 +360,7 @@ def get_job(job_id: str):
             "findings": [_finding_json(f) for f in r.findings],
             "warnings": list(getattr(j.doc, "warnings", [])) + list(r.warnings),
             "timings": r.timings, "models": r.models, "seconds": round(j.seconds, 2),
+            "outputs": j.outputs,
         })
     return out
 
@@ -319,27 +381,71 @@ def _safe_stem(filename: str, values: list[str]) -> str:
     return re.sub(r"[\\/:*?\"<>|]+", "_", stem)[:80] or "document"
 
 
+def _seed(j: Job) -> int:
+    return int(j.id[:8], 16)
+
+
+def _chosen(j: Job, body: dict) -> tuple[list[Finding], int]:
+    """Accepted system findings + manual additions, in document order. Returns (findings, manual count)."""
+    seg_text = {s.id: s.text for s in j.doc.segments}
+    order = {s.id: i for i, s in enumerate(j.doc.segments)}
+    accepted_ids = set(body.get("accepted") or [])
+    chosen = [f for f in j.result.findings if f.id in accepted_ids]
+    manual = 0
+    for k, a in enumerate(body.get("added") or []):
+        sid = a.get("seg_id")
+        try:
+            s, e = int(a.get("start", 0)), int(a.get("end", 0))
+        except (TypeError, ValueError):
+            continue
+        et = a.get("entity_type") if a.get("entity_type") in ENTITY_TYPES else "OTHER_ID"
+        mid = str(a.get("id") or "")
+        if not re.fullmatch(r"m\d{1,6}", mid):
+            mid = f"m{k + 1}"
+        if sid in seg_text and 0 <= s < e <= len(seg_text[sid]):
+            chosen.append(Finding(sid, s, e, seg_text[sid][s:e], et, 1.0, ["manual"], id=mid))
+            manual += 1
+    chosen.sort(key=lambda f: (order.get(f.seg_id, 0), f.start, -f.end))
+    return chosen, manual
+
+
+def _redact_opts(body: dict) -> tuple[str, dict]:
+    mode = body.get("mode") if body.get("mode") in MODES else "token"
+    type_modes = {k: v for k, v in (body.get("type_modes") or {}).items() if k in ENTITY_TYPES and v in MODES}
+    return mode, type_modes
+
+
+@app.post("/api/jobs/{job_id}/preview")
+async def preview(job_id: str, request: Request):
+    """Replacement text for every chosen finding, so the review screen can show the redacted view."""
+    j = _job(job_id)
+    if j.status != "done":
+        raise HTTPException(409, "ยังตรวจไม่เสร็จ")
+    body = await request.json()
+    chosen, _ = _chosen(j, body)
+    mode, type_modes = _redact_opts(body)
+    plan = plan_redaction(chosen, mode, type_modes, seed=_seed(j))
+    out = {"replaced": plan.replaced}
+    if body.get("with_mapping"):   # result page after a reload: rebuild the key without regenerating files
+        out["mapping"] = plan.mapping
+    return out
+
+
 @app.post("/api/jobs/{job_id}/export")
 async def export(job_id: str, request: Request):
     j = _job(job_id)
     if j.status != "done":
         raise HTTPException(409, "ยังตรวจไม่เสร็จ")
     body = await request.json()
-    action = body.get("action", "redact")
-    accepted_ids = set(body.get("accepted", []))
-    seg_text = {s.id: s.text for s in j.doc.segments}
-    chosen = [f for f in j.result.findings if f.id in accepted_ids]
-    for k, a in enumerate(body.get("added", []) or []):
-        sid, s, e = a.get("seg_id"), int(a.get("start", 0)), int(a.get("end", 0))
-        et = a.get("entity_type") if a.get("entity_type") in ENTITY_TYPES else "OTHER_ID"
-        if sid in seg_text and 0 <= s < e <= len(seg_text[sid]):
-            chosen.append(Finding(sid, s, e, seg_text[sid][s:e], et, 1.0, ["manual"], id=f"m{k + 1}"))
-    chosen.sort(key=lambda f: (f.seg_id, f.start))
+    action = "highlight" if body.get("action") == "highlight" else "redact"
+    chosen, manual = _chosen(j, body)
     labels = {s.id: s.label for s in j.doc.segments}
     values = [f.text for f in chosen]
     stem = _safe_stem(j.filename, values)
+    sanitize = bool(body.get("sanitize", j.options.get("sanitize", True)))
     t0 = time.perf_counter()
-    j.files = {}
+    files: dict = {}
+    mode, replaced = "", {}
     try:
         if action == "highlight":
             spans: dict = {}
@@ -347,36 +453,61 @@ async def export(job_id: str, request: Request):
                 spans.setdefault(f.seg_id, []).append((f.start, f.end))
             data, info = j.doc.render_highlight(spans)
             hext = getattr(j.doc, "highlight_ext", j.doc.ext)
-            j.files[f"{stem}.highlight{hext}"] = (data, "application/octet-stream")
-            j.files[f"{stem}.findings.csv"] = (findings_csv(chosen, labels, None, True), "text/csv; charset=utf-8")
-            leaks, mapping, counts = [], None, Counter(f.entity_type for f in chosen)
+            files[f"{stem}.highlight{hext}"] = (data, "application/octet-stream")
+            files[f"{stem}.highlight.csv"] = (findings_csv(chosen, labels, None, True), "text/csv; charset=utf-8")
+            leaks, mapping, counts = [], None, dict(Counter(f.entity_type for f in chosen))
         else:
-            mode = body.get("mode") if body.get("mode") in MODES else "token"
-            type_modes = {k: v for k, v in (body.get("type_modes") or {}).items() if k in ENTITY_TYPES and v in MODES}
-            plan = plan_redaction(chosen, mode, type_modes)
-            data, info = j.doc.render_redacted(plan.edits, sanitize=bool(body.get("sanitize", True)))
+            mode, type_modes = _redact_opts(body)
+            plan = plan_redaction(chosen, mode, type_modes, seed=_seed(j))
+            data, info = j.doc.render_redacted(plan.edits, sanitize=sanitize)
             out_name = f"{stem}.redacted{j.doc.ext}"
-            j.files[out_name] = (data, "application/octet-stream")
-            j.files[f"{stem}.findings.csv"] = (findings_csv(chosen, labels, plan.replaced, False), "text/csv; charset=utf-8")
+            files[out_name] = (data, "application/octet-stream")
+            files[f"{stem}.findings.csv"] = (findings_csv(chosen, labels, plan.replaced, False), "text/csv; charset=utf-8")
             leaks = find_leaks(data, out_name, [(f.entity_type, f.text) for f in chosen])
             mapping = plan.mapping or None   # encrypted in the browser, never stored here
-            counts = plan.counts
-            action = f"redact:{mode}"
+            counts = dict(plan.counts)
+            replaced = plan.replaced
     except Exception as e:
         raise HTTPException(500, f"สร้างไฟล์ไม่สำเร็จ ({type(e).__name__})")
-    _record(kind="export", ext=j.doc.ext, seconds=time.perf_counter() - t0, findings=len(chosen),
-            by_type=dict(counts), action=action.split(":")[0], mode=action.split(":")[1] if ":" in action else "", leaks=len(leaks),
-            by_layer=dict(Counter(primary_layer(f) for f in chosen)))
+    seconds = time.perf_counter() - t0
+
+    system = j.result.findings
+    chosen_ids = {f.id for f in chosen}
+    rejected = [f for f in system if f.id not in chosen_ids]
+    _record(kind="export", ext=j.doc.ext, seconds=seconds, findings=len(chosen), by_type=counts, action=action, mode=mode,
+            leaks=len(leaks), by_layer=dict(Counter(primary_layer(f) for f in chosen)),
+            models=[m["model"] for m in j.result.models],
+            extra={"found": len(system), "accepted_system": len(system) - len(rejected), "manual": manual,
+                   "rejected": len(rejected), "rejected_by_type": dict(Counter(f.entity_type for f in rejected)),
+                   "found_by_type": dict(Counter(f.entity_type for f in system)),
+                   "found_by_layer": dict(Counter(primary_layer(f) for f in system)),
+                   "accepted_by_layer": dict(Counter(primary_layer(f) for f in system if f.id in chosen_ids))})
+
     warn = [info["warning"]] if info.get("warning") else []
     if info.get("missed"):
         warn.append(f"มี {info['missed']} รายการที่วางในไฟล์ไม่ได้ — ตรวจไฟล์ผลลัพธ์ก่อนส่งต่อ")
     if info.get("not_highlighted"):
         warn.append(f"{info['not_highlighted']} รายการอยู่ในส่วนที่ไฮไลต์ไม่ได้ (เช่น ข้อมูลไฟล์ คอมเมนต์) — ดูในไฟล์ CSV")
-    return {
-        "files": [{"name": n, "url": f"api/jobs/{j.id}/files/{n}"} for n in j.files],
+    for n in j.outputs.get(action, {}).get("names", []):   # a re-export replaces that action's files only
+        j.files.pop(n, None)
+    j.files.update(files)
+    summary = {
+        "action": action, "mode": mode, "count": len(chosen), "manual": manual, "found": len(system),
+        "counts": counts, "seconds": round(seconds, 2), "names": list(files),
+        "files": [{"name": n, "url": f"api/jobs/{j.id}/files/{n}", "size": len(d)} for n, (d, _) in files.items()],
         "leaks": [{"type": l["type"], "masked": mask_value(l["type"], l["value"]), "where": l["where"]} for l in leaks],
-        "mapping": mapping, "warnings": warn, "count": len(chosen),
+        "warnings": warn + list(getattr(j.doc, "warnings", [])),
+        "checks": {"values": len({(f.entity_type, f.text) for f in chosen}), "leaks": len(leaks),
+                   "stem_changed": stem == "document" and os.path.splitext(j.filename)[0] != "document",
+                   "sanitize": sanitize, "secrets": counts.get("SECRET", 0) if action == "redact" else
+                   sum(1 for f in chosen if f.entity_type == "SECRET")},
+        "replaced": replaced, "has_mapping": bool(mapping),
+        "request": {"accepted": sorted(f.id for f in chosen if not f.id.startswith("m")),
+                    "added": body.get("added") or [], "mode": mode, "type_modes": body.get("type_modes") or {},
+                    "sanitize": sanitize},
     }
+    j.outputs[action] = summary
+    return dict(summary, mapping=mapping)
 
 
 @app.get("/api/jobs/{job_id}/files/{name}")
@@ -390,30 +521,113 @@ def download(job_id: str, name: str):
 
 
 # ---------------------------------------------------------------- analytics
-@app.get("/api/stats")
-def stats(days: int = 30):
-    since = time.time() - max(1, min(days, 365)) * 86400
+_EVENT_COLS = "ts, kind, ext, seconds, findings, by_type, by_layer, models, action, mode, leaks, extra"
+
+
+def _events(since: float, until: float, ext: str, model: str) -> list[dict]:
     with _db() as con:
-        rows = con.execute("select ts, kind, ext, seconds, findings, by_type, by_layer, models, action, mode, leaks from events where ts >= ? order by ts", (since,)).fetchall()
-    scans = [r for r in rows if r[1] == "scan"]
-    exports = [r for r in rows if r[1] == "export"]
-    by_type, by_layer, by_ext, by_mode, by_model, per_day = Counter(), Counter(), Counter(), Counter(), Counter(), Counter()
-    for r in scans:
-        by_type.update(json.loads(r[5]))
-        by_layer.update(json.loads(r[6]))
-        by_ext[r[2]] += 1
-        for m in json.loads(r[7] or "[]"):
-            by_model[m] += 1
-        per_day[time.strftime("%Y-%m-%d", time.localtime(r[0]))] += 1
-    for r in exports:
-        by_mode[r[9] or r[8]] += 1
-    secs = sorted(r[3] for r in scans)
+        rows = con.execute(f"select {_EVENT_COLS} from events where ts >= ? and ts < ? order by ts", (since, until)).fetchall()
+    out = []
+    for r in rows:
+        e = dict(zip(_EVENT_COLS.split(", "), r))
+        for k in ("by_type", "by_layer", "extra"):
+            try:
+                e[k] = json.loads(e[k] or "{}")
+            except ValueError:
+                e[k] = {}
+        try:
+            e["models"] = json.loads(e["models"] or "[]")
+        except ValueError:
+            e["models"] = []
+        if ext and (e["ext"] or "").lower() != ext.lower():
+            continue
+        if model == "none" and e["models"]:
+            continue
+        if model and model != "none" and not any(m.split("/")[0] == model or m == model for m in e["models"]):
+            continue
+        out.append(e)
+    return out
+
+
+def _summary(events: list[dict]) -> dict:
+    scans = [e for e in events if e["kind"] == "scan"]
+    exports = [e for e in events if e["kind"] == "export" and "found" in e["extra"]]
+    found = sum(e["extra"]["found"] for e in exports)
+    acc = sum(e["extra"]["accepted_system"] for e in exports)
+    man = sum(e["extra"]["manual"] for e in exports)
+    return {"docs": len(scans), "findings": sum(e["findings"] for e in scans),
+            "accept_rate": acc / found if found else None,
+            "manual_rate": man / (acc + man) if (acc + man) else None}
+
+
+@app.get("/api/stats")
+def stats(days: int = 30, ext: str = "", model: str = ""):
+    days = max(1, min(days, 365))
+    now = time.time()
+    since = now - days * 86400
+    cur = _events(since, now + 1, ext, model)
+    prev = _events(since - days * 86400, since, ext, model)
+    scans = [e for e in cur if e["kind"] == "scan"]
+    exports = [e for e in cur if e["kind"] == "export"]
+    rich = [e for e in exports if "found" in e["extra"]]
+
+    by_type, by_layer, per_day, per_day_docs = Counter(), Counter(), Counter(), Counter()
+    for e in scans:
+        by_type.update(e["by_type"])
+        by_layer.update(e["by_layer"])
+        day = time.strftime("%Y-%m-%d", time.localtime(e["ts"]))
+        per_day[day] += e["findings"]
+        per_day_docs[day] += 1
+    days_list = [time.strftime("%Y-%m-%d", time.localtime(now - (days - 1 - i) * 86400)) for i in range(days)]
+
+    found_by_type, rejected_by_type, found_by_layer, accepted_by_layer = Counter(), Counter(), Counter(), Counter()
+    manual = 0
+    for e in rich:
+        x = e["extra"]
+        found_by_type.update(x.get("found_by_type", {}))
+        rejected_by_type.update(x.get("rejected_by_type", {}))
+        found_by_layer.update(x.get("found_by_layer", {}))
+        accepted_by_layer.update(x.get("accepted_by_layer", {}))
+        manual += x.get("manual", 0)
+
+    outputs = Counter(f"{e['action']}:{e['mode']}" if e["action"] == "redact" else e["action"] for e in exports)
+
+    per_ext: dict = {}
+    for e in scans:
+        d = per_ext.setdefault((e["ext"] or "").lstrip(".").upper() or "?", {"docs": 0, "findings": 0, "found": 0, "acc": 0, "manual": 0})
+        d["docs"] += 1
+        d["findings"] += e["findings"]
+    for e in rich:
+        d = per_ext.setdefault((e["ext"] or "").lstrip(".").upper() or "?", {"docs": 0, "findings": 0, "found": 0, "acc": 0, "manual": 0})
+        d["found"] += e["extra"]["found"]
+        d["acc"] += e["extra"]["accepted_system"]
+        d["manual"] += e["extra"]["manual"]
+
+    with _db() as con:   # filter choices come from every event, not just the filtered range
+        all_rows = con.execute("select ext, models from events").fetchall()
+    exts = sorted({(r[0] or "").lstrip(".").lower() for r in all_rows if r[0]})
+    models = sorted({m.split("/")[0] for r in all_rows for m in json.loads(r[1] or "[]")})
+
+    secs = sorted(e["seconds"] for e in scans)
     return {
-        "scans": len(scans), "exports": len(exports), "findings": sum(r[4] for r in scans),
-        "leaks": sum(r[10] for r in exports), "median_seconds": round(secs[len(secs) // 2], 2) if secs else 0,
-        "by_type": dict(by_type), "by_layer": dict(by_layer), "by_ext": dict(by_ext), "by_mode": dict(by_mode),
-        "by_model": dict(by_model), "per_day": dict(sorted(per_day.items())),
+        "days": days, "now": now, "summary": _summary(cur), "previous": _summary(prev),
+        "scans": len(scans), "exports": len(exports), "findings": sum(e["findings"] for e in scans),
+        "leaks": sum(e["leaks"] for e in exports), "median_seconds": round(secs[len(secs) // 2], 2) if secs else 0,
+        "per_day": [{"date": d, "findings": per_day.get(d, 0), "docs": per_day_docs.get(d, 0)} for d in days_list],
+        "by_type": dict(by_type), "by_layer": dict(by_layer),
+        "found_by_type": dict(found_by_type), "rejected_by_type": dict(rejected_by_type),
+        "found_by_layer": dict(found_by_layer), "accepted_by_layer": dict(accepted_by_layer), "manual": manual,
+        "outputs": dict(outputs), "per_ext": per_ext, "filters": {"exts": exts, "models": models},
     }
+
+
+@app.get("/api/leaderboard")
+def leaderboard():
+    """Offline evaluation results (eval/run_eval.py writes var/leaderboard.json). Empty until it has been run."""
+    try:
+        return json.loads((VAR / "leaderboard.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"rows": [], "columns": [], "dataset": None}
 
 
 # ---------------------------------------------------------------- Presidio-compatible API (LiteLLM guardrail)

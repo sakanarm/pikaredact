@@ -285,6 +285,7 @@ def detect(
     combine: str = "union",
     min_agree: int = 2,
     entities: list[str] | None = None,
+    layers: dict | None = None,
     progress=None,
 ) -> DetectResult:
     """profiles: several LLMs run in parallel. combine="union" keeps everything any model found
@@ -299,13 +300,18 @@ def detect(
     timings: dict[str, float] = {}
     warnings: list[str] = []
 
+    # layers: {"ner": bool, "list": bool}; rules are always on, LLM is chosen by `profiles`.
+    off = {k for k in ("ner", "list") if layers and layers.get(k) is False}
     prog("rules")
     found = _presidio(segs, norms)
+    if off:
+        found = [f for f in found if not ({layer_of(s) for s in f.sources} <= off)]
     timings["rules"] = time.perf_counter() - t0
 
     t1 = time.perf_counter()
-    norm_segs = [replace(s, text=n) for s, n in zip(segs, norms)]
-    found += table_findings(norm_segs)
+    if "ner" not in off:
+        norm_segs = [replace(s, text=n) for s, n in zip(segs, norms)]
+        found += table_findings(norm_segs)
     timings["tables"] = time.perf_counter() - t1
 
     plist = list(profiles or []) + ([profile] if profile is not None else [])

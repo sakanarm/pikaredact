@@ -91,8 +91,11 @@ def plan_redaction(findings: list[Finding], mode: str, type_modes: dict[str, str
     for f in findings:
         groups[(f.entity_type, value_key(f.entity_type, f.text))].append(f)
     link = _link_partial_names(groups)
-    # deterministic numbering: order of first appearance
-    order = sorted(groups, key=lambda k: min(int(f.id[1:]) if f.id[1:].isdigit() else 0 for f in groups[k]))
+    # deterministic numbering: order of first appearance (callers pass findings in document order)
+    first = {}
+    for i, f in enumerate(findings):
+        first.setdefault((f.entity_type, value_key(f.entity_type, f.text)), i)
+    order = sorted(groups, key=lambda k: first[k])
     numbers: dict[str, int] = defaultdict(int)
     token_of: dict[tuple, str] = {}
     fake = FakeTH(seed)

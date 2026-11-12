@@ -1,0 +1,49 @@
+<section id="restore" class="card" aria-label="คืนค่าจากรหัส" style="margin-top: {{rsMargin}}; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; padding: 16px 20px; border-bottom: 1px solid #EFEFEA">
+<div><h2 style="margin: 0; font-size: 16px; font-weight: 600">คืนค่าจากรหัส</h2><div style="margin-top: 3px; font-size: 13px; color: #71717A">ได้คำตอบจาก AI ที่มีรหัสอย่าง [PERSON_3] กลับมา วางที่นี่แล้วใช้ไฟล์กุญแจแปลงกลับเป็นค่าจริง</div></div>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>ถอดรหัสบนเบราว์เซอร์ ไม่ส่งกุญแจขึ้นเซิร์ฟเวอร์</span>
+</div>
+<div style="display: flex; flex-wrap: wrap">
+<div style="flex: 1 1 420px; min-width: 0; padding: 18px 20px; border-right: 1px solid #EFEFEA">
+<label for="rs-text" style="display: block; font-size: 13px; font-weight: 500; color: #3F3F46">1 · ข้อความจาก AI</label>
+<textarea id="rs-text" onInput="{{rsOnText}}" placeholder="วางข้อความที่มีรหัสอย่าง [PERSON_1] หรือ [PHONE_2]" style="margin-top: 8px; display: block; width: 100%; box-sizing: border-box; border: 1px solid #E4E4DF; border-radius: 10px; padding: 12px 14px; font: inherit; font-size: 14px; line-height: 1.9; min-height: 130px; resize: vertical; background: #FCFCFB; color: #18181B">
+{{rsText}}</textarea>
+<div style="margin-top: 6px; font-size: 12px; color: #71717A">{{rsTokenNote}}</div>
+
+<div style="margin-top: 16px; font-size: 13px; font-weight: 500; color: #3F3F46">2 · ไฟล์กุญแจและรหัสผ่าน</div>
+<sc-if value="{{rsJobKey}}">
+<div style="margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border: 1px solid #E4E4DF; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; background: #FCFCFB">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#52525B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="m11 12 9-9"></path><path d="m17 6 3 3"></path></svg>
+<span style="flex: 1; min-width: 0">ใช้กุญแจของงานนี้ <span style="color: #71717A">· อยู่ในแท็บนี้เท่านั้น ปิดแท็บแล้วต้องใช้ไฟล์ .piimap</span></span>
+<button type="button" class="lnkbtn" onClick="{{rsUseFile}}" style="font-size: 12.5px">ใช้ไฟล์ .piimap แทน</button>
+</div>
+</sc-if>
+<sc-if value="{{rsFileMode}}">
+<div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+<button type="button" onClick="{{rsPick}}" style="flex: 1 1 220px; min-width: 0; display: inline-flex; align-items: center; gap: 10px; border: 1px solid {{rsFileBorder}}; background: #FFFFFF; border-radius: 10px; padding: 8px 12px; min-height: 42px; box-sizing: border-box; font-size: 13.5px; text-align: left; cursor: pointer; color: {{rsFileFg}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#52525B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="8" cy="15" r="4"></circle><path d="m11 12 9-9"></path><path d="m17 6 3 3"></path></svg><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{rsFileName}}</span></button>
+<input id="rs-file" type="file" accept=".piimap,application/json" class="vh" tabindex="-1" aria-hidden="true" onChange="{{rsOnFile}}">
+<label for="rs-pass" class="vh">รหัสผ่านไฟล์กุญแจ</label>
+<input id="rs-pass" type="password" autocomplete="off" value="{{rsPass}}" onInput="{{rsOnPass}}" onKeydown="{{rsKey}}" placeholder="รหัสผ่านไฟล์กุญแจ" class="inp" style="flex: 1 1 160px; min-width: 0; min-height: 42px">
+</div>
+<sc-if value="{{rsCanJob}}"><button type="button" class="lnkbtn" onClick="{{rsUseJob}}" style="margin-top: 8px; font-size: 12.5px">ใช้กุญแจของงานนี้แทน</button></sc-if>
+</sc-if>
+<div style="margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button type="button" onClick="{{rsRun}}" {{{rsRunDis}}} style="display: inline-flex; align-items: center; gap: 8px; border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 10px 18px; min-height: 42px; font-size: 13.5px; font-weight: 500; cursor: pointer"><sc-if value="{{rsBusy}}"><span class="spin" style="border-color: #52525B; border-top-color: #FFFFFF"></span></sc-if><sc-if value="{{rsIdle}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg></sc-if>{{rsRunLabel}}</button>
+<sc-if value="{{rsError}}"><span role="alert" style="font-size: 13px; color: #B91C1C">{{rsError}}</span></sc-if>
+</div>
+</div>
+<div style="flex: 1 1 420px; min-width: 0; padding: 18px 20px; background: #FCFCFB">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #3F3F46">ผลลัพธ์</span><sc-if value="{{rsDone}}"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: {{rsSumFg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{{rsSumIc}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>{{rsSummary}}</span></sc-if></div>
+<sc-if value="{{rsDone}}">
+<div aria-live="polite" style="margin-top: 8px; border: 1px solid #E4E4DF; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 2; min-height: 120px; background: #FFFFFF; white-space: pre-wrap; overflow-wrap: anywhere"><sc-for list="{{rsParts}}" as="a"><span style="box-shadow: {{a.sh}}; background: {{a.bg}}" title="{{a.tip}}">{{a.t}}</span></sc-for></div>
+<div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" onClick="{{rsCopy}}" style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 10px; padding: 8px 14px; min-height: 40px; font-size: 13.5px; font-weight: 500; cursor: pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"></path></svg>คัดลอก</button>
+<button type="button" onClick="{{rsSaveTxt}}" style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 10px; padding: 8px 14px; min-height: 40px; font-size: 13.5px; font-weight: 500; cursor: pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>บันทึกเป็น .txt</button>
+</div>
+</sc-if>
+<sc-if value="{{rsNotDone}}">
+<div style="margin-top: 8px; border: 1px dashed #D4D4CF; border-radius: 10px; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; font-size: 13.5px; color: #71717A">กด “คืนค่า” แล้วข้อความที่มีค่าจริงจะแสดงที่นี่<br>ค่าจริงอยู่บนเครื่องคุณเท่านั้น</div>
+</sc-if>
+</div>
+</div>
+</section>

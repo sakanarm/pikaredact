@@ -1,0 +1,220 @@
+<main class="mainp" style="flex: 1; min-width: 0; margin: 10px 10px 10px 0; background: #FFFFFF; border: 1px solid #E7E7E2; border-radius: 16px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-bottom: 1px solid #EFEFEA">
+<div style="font-size: 13.5px; color: #71717A">ภาพรวม <span style="margin: 0 6px">/</span><span style="color: #18181B; font-weight: 500">{{crumb}}</span></div>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B; background: #F6F6F3; border: 1px solid #ECECE7; padding: 6px 10px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"></path></svg>เก็บเฉพาะสถิติ ไม่เก็บค่าที่พบ</span>
+</div>
+
+<div style="padding: 24px 28px 40px; max-width: 1180px">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div>
+<h1 style="margin: 0; font-size: 28px; letter-spacing: -0.015em; font-weight: 650">{{h1}}</h1>
+<p style="margin: 6px 0 0; font-size: 14.5px; color: #52525B">{{lead}}</p>
+</div>
+<button type="button" onClick="{{exportCsv}}" {{{exportDis}}} style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 10px; padding: 9px 14px; min-height: 40px; font-size: 13.5px; font-weight: 500; cursor: pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Export CSV</button>
+</div>
+
+<div style="margin-top: 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #EFEFEA">
+<div role="tablist" aria-label="มุมมอง Analytics" style="display: flex; gap: 22px">
+<sc-for list="{{tabs}}" as="t">
+<button type="button" role="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}" style="border: 0; background: none; padding: 10px 0; min-height: 44px; font-size: 14.5px; font-weight: {{t.w}}; color: {{t.fg}}; box-shadow: inset 0 -2px 0 {{t.line}}; cursor: pointer">{{t.label}}</button>
+</sc-for>
+</div>
+<sc-if value="{{isOverview}}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 8px">
+<sc-if value="{{busy}}"><span class="spin" aria-label="กำลังโหลด"></span></sc-if>
+<sc-for list="{{filters}}" as="f">
+<select class="sel pill-sel" aria-label="{{f.aria}}" onChange="{{f.set}}"><sc-for list="{{f.opts}}" as="o"><option value="{{o.v}}" {{{o.sel}}}>{{o.label}}</option></sc-for></select>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{error}}">
+<div role="alert" class="card" style="margin-top: 18px; padding: 16px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-color: #FECACA; background: #FEF2F2; color: #991B1B; font-size: 13.5px">{{error}}<button type="button" onClick="{{retry}}" style="margin-left: auto; border: 1px solid #FECACA; background: #FFFFFF; border-radius: 9px; padding: 7px 12px; min-height: 36px; font-size: 13px; color: #991B1B; cursor: pointer">ลองใหม่</button></div>
+</sc-if>
+
+<sc-if value="{{isOverview}}">
+<sc-if value="{{loaded}}">
+<div style="margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px">
+<sc-for list="{{kpis}}" as="k">
+<div class="card" style="padding: 16px 18px">
+<div style="font-size: 13px; color: #52525B">{{k.label}}</div>
+<div class="mono" style="margin-top: 10px; font-size: 30px; font-weight: 500; letter-spacing: -0.02em">{{k.value}}</div>
+<div style="margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B"><sc-if value="{{k.delta}}"><span style="display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: {{k.dFg}}"><sc-if value="{{k.arrow}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: {{k.rot}}"><path d="M12 19V5"></path><path d="m6 11 6-6 6 6"></path></svg></sc-if>{{k.delta}}</span></sc-if>{{k.note}}</div>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{noData}}">
+<div class="card" style="margin-top: 16px; padding: 40px 24px; text-align: center">
+<div style="font-size: 15px; font-weight: 600">ยังไม่มีงานในช่วงนี้</div>
+<div style="margin-top: 6px; font-size: 13.5px; color: #52525B">สถิติจะขึ้นหลังมีการตรวจเอกสาร ลองเปลี่ยนช่วงเวลาหรือตัวกรองด้านบน</div>
+<a href="#/upload" style="margin-top: 14px; display: inline-flex; align-items: center; border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 9px 16px; min-height: 40px; box-sizing: border-box; font-size: 13.5px; font-weight: 500">ตรวจเอกสาร</a>
+</div>
+</sc-if>
+
+<sc-if value="{{hasData}}">
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+<section class="card" aria-label="ข้อมูลส่วนบุคคลที่พบต่อวัน" style="flex: 999 1 560px; min-width: 0; padding: 18px 20px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px"><div><h2 style="margin: 0; font-size: 15px; font-weight: 600">ข้อมูลส่วนบุคคลที่พบต่อวัน</h2><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">จุดที่พบรวมทุกงาน · {{rangeText}}</div></div><div class="mono" style="font-size: 13px; color: #52525B">รวม {{chartTotal}}</div></div>
+<div style="margin-top: 14px; position: relative; height: 230px; padding: 0 0 24px 40px; box-sizing: border-box">
+<div style="position: relative; height: 100%">
+<sc-for list="{{grid}}" as="g">
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: {{g.pos}}; border-top: 1px solid {{g.line}}"><span class="mono" style="position: absolute; right: calc(100% + 8px); top: -8px; font-size: 11px; color: #898781">{{g.label}}</span></div>
+</sc-for>
+<svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible">
+<path d="{{areaD}}" fill="#2A78D6" fill-opacity="0.12"></path>
+<path d="{{lineD}}" fill="none" stroke="#2A78D6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>
+<sc-for list="{{pts}}" as="p">
+<div class="col" style="position: absolute; top: 0; bottom: 0; left: {{p.left}}; width: {{p.w}}">
+<div class="tipx" style="position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px solid #C3C2B7"></div>
+<div class="tipx" style="position: absolute; left: 50%; bottom: {{p.bottom}}; width: 10px; height: 10px; margin: 0 0 -5px -5px; border-radius: 99px; background: #2A78D6; box-shadow: 0 0 0 2px #FFFFFF"></div>
+<div class="tipx" role="tooltip" style="position: absolute; z-index: 3; bottom: calc({{p.bottom}} + 14px); left: {{p.tl}}; right: {{p.tr}}; transform: {{p.tt}}; background: #FFFFFF; border: 1px solid #E4E4DF; border-radius: 8px; box-shadow: 0 8px 24px -8px rgba(0,0,0,.25); padding: 7px 10px; white-space: nowrap; font-size: 12px; color: #52514E">{{p.date}} · {{p.docs}} เอกสาร<div class="mono" style="font-size: 14px; font-weight: 600; color: #0B0B0B">{{p.v}} จุด</div></div>
+</div>
+</sc-for>
+</div>
+<sc-for list="{{xlabels}}" as="x">
+<span class="mono" style="position: absolute; bottom: 0; left: calc(40px + (100% - 40px) * {{x.f}}); transform: translateX({{x.tx}}); font-size: 11px; color: #898781; white-space: nowrap">{{x.label}}</span>
+</sc-for>
+</div>
+</section>
+
+<section class="card" aria-label="ประเภทที่พบมากที่สุด" style="flex: 1 1 320px; min-width: 0; padding: 18px 20px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">ประเภทที่พบมากที่สุด</h2>
+<div style="margin-top: 2px; font-size: 12.5px; color: #71717A">จุดที่พบ {{days}} วัน · ชี้เพื่อดูสัดส่วนที่ถูกยกเลิก</div>
+<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 11px">
+<sc-for list="{{topTypes}}" as="t">
+<div class="barrow" style="position: relative">
+<div style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><span>{{t.label}}</span><span class="mono" style="color: #52514E; font-variant-numeric: tabular-nums">{{t.n}}</span></div>
+<div aria-hidden="true" style="margin-top: 5px; height: 8px; border-radius: 4px; background: #F1F1EE"><div style="height: 100%; width: {{t.pct}}; border-radius: 4px; background: #2A78D6"></div></div>
+<div class="tipx" role="tooltip" style="position: absolute; z-index: 3; right: 0; top: -34px; background: #FFFFFF; border: 1px solid #E4E4DF; border-radius: 8px; box-shadow: 0 8px 24px -8px rgba(0,0,0,.25); padding: 5px 9px; font-size: 12px; color: #52514E; white-space: nowrap">{{t.share}} ของทั้งหมด · ยกเลิก {{t.rej}}</div>
+</div>
+</sc-for>
+</div>
+</section>
+</div>
+
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+<section class="card" aria-label="ชั้นการตรวจจับที่พบ" style="flex: 1 1 460px; min-width: 0; padding: 18px 20px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">ใครเจอก่อน · แยกตามชั้นการตรวจจับ</h2>
+<div style="margin-top: 2px; font-size: 12.5px; color: #71717A">สัดส่วนจุดที่คนยืนยันแล้ว จำแนกตามชั้นที่พบ</div>
+<sc-if value="{{hasLayers}}">
+<div role="img" aria-label="{{layerAria}}" style="margin-top: 16px; display: flex; gap: 2px; height: 28px">
+<sc-for list="{{layers}}" as="l">
+<div class="barrow" style="position: relative; width: {{l.pct}}; background: {{l.color}}; border-radius: {{l.rad}}">
+<div class="tipx" role="tooltip" style="position: absolute; z-index: 3; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #FFFFFF; border: 1px solid #E4E4DF; border-radius: 8px; box-shadow: 0 8px 24px -8px rgba(0,0,0,.25); padding: 6px 10px; font-size: 12px; color: #52514E; white-space: nowrap">{{l.label}} <b class="mono" style="color: #0B0B0B">{{l.share}}</b> · ยอมรับ {{l.acc}}</div>
+</div>
+</sc-for>
+</div>
+<div style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px">
+<sc-for list="{{layers}}" as="l">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span aria-hidden="true" style="flex: none; width: 10px; height: 10px; border-radius: 3px; background: {{l.color}}"></span><span style="flex: 1; min-width: 0">{{l.label}}</span><span class="mono" style="color: #52514E">{{l.share}}</span></div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{noLayers}}"><div style="margin-top: 16px; font-size: 13px; color: #71717A">ยังไม่มีงานที่ดาวน์โหลดผลลัพธ์ในช่วงนี้</div></sc-if>
+</section>
+
+<section class="card" aria-label="ผลลัพธ์ที่ผู้ใช้เลือก" style="flex: 1 1 340px; min-width: 0; padding: 18px 20px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">ผลลัพธ์ที่ผู้ใช้เลือก</h2>
+<div style="margin-top: 2px; font-size: 12.5px; color: #71717A">ต่อเอกสาร · บางงานสร้างทั้งสองแบบ</div>
+<div style="margin-top: 14px; display: flex; flex-direction: column; gap: 12px">
+<sc-for list="{{outputs}}" as="o">
+<div>
+<div style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><span style="display: inline-flex; align-items: center; gap: 7px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: {{o.color}}"></span>{{o.label}}</span><span class="mono" style="color: #52514E">{{o.n}}</span></div>
+<div aria-hidden="true" style="margin-top: 5px; height: 8px; border-radius: 4px; background: #F1F1EE"><div style="height: 100%; width: {{o.pct}}; border-radius: 4px; background: {{o.color}}"></div></div>
+</div>
+</sc-for>
+<sc-if value="{{noOutputs}}"><div style="font-size: 13px; color: #71717A">ยังไม่มีการดาวน์โหลดผลลัพธ์ในช่วงนี้</div></sc-if>
+</div>
+</section>
+</div>
+
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<section class="card" aria-label="ตามประเภทไฟล์" style="flex: 1 1 520px; min-width: 0; overflow: hidden">
+<div style="padding: 16px 20px 10px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">ตามประเภทไฟล์</h2></div>
+<div style="overflow-x: auto"><table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 480px">
+<thead><tr style="text-align: left; color: #71717A; font-size: 12.5px"><th scope="col" style="font-weight: 500; padding: 8px 20px">ประเภท</th><th scope="col" style="font-weight: 500; padding: 8px; text-align: right">เอกสาร</th><th scope="col" style="font-weight: 500; padding: 8px; text-align: right">จุด/เอกสาร</th><th scope="col" style="font-weight: 500; padding: 8px; text-align: right">ยอมรับ</th><th scope="col" style="font-weight: 500; padding: 8px 20px; text-align: right">เพิ่มเอง/เอกสาร</th></tr></thead>
+<tbody><sc-for list="{{docTypes}}" as="d"><tr class="row" style="border-top: 1px solid #F2F2EE"><td style="padding: 10px 20px; font-weight: 500"><span style="display: inline-flex; align-items: center; gap: 8px"><span aria-hidden="true" class="mono" style="font-size: 10.5px; font-weight: 600; color: #FFFFFF; background: {{d.color}}; border-radius: 4px; padding: 2px 5px">{{d.k}}</span>{{d.kind}}</span></td><td class="mono" style="padding: 10px 8px; text-align: right">{{d.n}}</td><td class="mono" style="padding: 10px 8px; text-align: right">{{d.per}}</td><td class="mono" style="padding: 10px 8px; text-align: right">{{d.acc}}</td><td style="padding: 10px 20px; text-align: right"><span class="mono">{{d.man}}</span></td></tr></sc-for></tbody>
+</table></div>
+</section>
+
+<section class="card" aria-label="ถูกยกเลิกบ่อย" style="flex: 1 1 380px; min-width: 0; overflow: hidden">
+<div style="padding: 16px 20px 10px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">ถูกยกเลิกบ่อย</h2><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">ระบบจับเกิน · ปรับได้ที่คำยกเว้น</div></div>
+<sc-for list="{{fps}}" as="f">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-top: 1px solid #F2F2EE">
+<div style="flex: 1; min-width: 0"><div style="font-size: 13.5px; font-weight: 500">{{f.label}}</div><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">{{f.why}}</div></div>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: {{f.fg}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="{{f.ic}}" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 7v6"></path><path d="M12 17h.01"></path></svg><b class="mono" style="font-weight: 600">{{f.rate}}</b> {{f.lvl}}</span>
+</div>
+</sc-for>
+<sc-if value="{{noFps}}"><div style="padding: 10px 20px 14px; border-top: 1px solid #F2F2EE; font-size: 13px; color: #71717A">{{noFpsText}}</div></sc-if>
+<a href="#/settings/lists" style="display: block; padding: 12px 20px; border-top: 1px solid #F2F2EE; font-size: 13px; color: #2563EB">เปิดคำยกเว้น</a>
+</section>
+</div>
+</sc-if>
+</sc-if>
+<sc-if value="{{firstLoad}}"><div style="margin-top: 40px; display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 13.5px; color: #52525B"><span class="spin"></span>กำลังโหลดสถิติ…</div></sc-if>
+</sc-if>
+
+<sc-if value="{{isBoard}}">
+<sc-if value="{{boardEmpty}}">
+<div class="card" style="margin-top: 18px; padding: 40px 24px; text-align: center">
+<div style="font-size: 15px; font-weight: 600">ยังไม่มีผลเทียบ</div>
+<div style="margin: 6px auto 0; max-width: 560px; font-size: 13.5px; line-height: 1.7; color: #52525B">Leaderboard แสดงผลจากการรันชุดทดสอบสังเคราะห์ที่มีเฉลย บนเซิร์ฟเวอร์นี้ (ผลจะอยู่ที่ <span class="mono">var/leaderboard.json</span>) ระหว่างนี้ดูสถิติการใช้งานจริงได้ที่แท็บภาพรวม</div>
+</div>
+</sc-if>
+<sc-if value="{{boardHas}}">
+<div class="card" style="margin-top: 18px; padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 13.5px; color: #3F3F46">
+<span><span style="color: #71717A">ชุดทดสอบ</span> <b style="font-weight: 600">{{ds.name}}</b></span>
+<span><span style="color: #71717A">เอกสาร</span> <b class="mono" style="font-weight: 600">{{ds.docs}}</b><sc-if value="{{ds.kinds}}"> · {{ds.kinds}}</sc-if></span>
+<span><span style="color: #71717A">จุดที่ต้องจับ</span> <b class="mono" style="font-weight: 600">{{ds.spans}}</b></span>
+<span><span style="color: #71717A">เรียงตาม</span> <b style="font-weight: 600">Recall</b> แล้ว F2 · พลาดน้อยสำคัญกว่าจับเกิน</span>
+</div>
+
+<section class="card" aria-label="Leaderboard" style="margin-top: 16px; overflow: hidden">
+<div style="overflow-x: auto"><table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 900px">
+<thead><tr style="text-align: left; color: #71717A; font-size: 12.5px"><th scope="col" style="font-weight: 500; padding: 12px 18px; width: 40px">#</th><th scope="col" style="font-weight: 500; padding: 12px 8px">ชุดการตรวจ</th><th scope="col" style="font-weight: 500; padding: 12px 8px; width: 200px">Recall</th><th scope="col" style="font-weight: 500; padding: 12px 8px; text-align: right">Precision</th><th scope="col" style="font-weight: 500; padding: 12px 8px; text-align: right">F2</th><th scope="col" style="font-weight: 500; padding: 12px 8px; text-align: right">พลาดจุดร้ายแรง</th><th scope="col" style="font-weight: 500; padding: 12px 18px; text-align: right">เวลา/เอกสาร</th></tr></thead>
+<tbody><sc-for list="{{board}}" as="b"><tr class="row" style="border-top: 1px solid #F2F2EE; background: {{b.bg}}">
+<td class="mono" style="padding: 12px 18px; color: #52514E">{{b.rank}}</td>
+<td style="padding: 12px 8px"><div style="font-weight: 500">{{b.name}}</div><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">{{b.sub}}</div></td>
+<td style="padding: 12px 8px"><div style="display: flex; align-items: center; gap: 10px"><span class="mono" style="width: 44px; font-weight: 600">{{b.r}}</span><span aria-hidden="true" style="flex: 1; height: 8px; border-radius: 4px; background: #F1F1EE"><span style="display: block; height: 100%; width: {{b.rPct}}; border-radius: 4px; background: #2A78D6"></span></span></div></td>
+<td class="mono" style="padding: 12px 8px; text-align: right">{{b.p}}</td>
+<td class="mono" style="padding: 12px 8px; text-align: right">{{b.f2}}</td>
+<td style="padding: 12px 8px; text-align: right"><span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; padding: 3px 8px; border-radius: 6px; background: {{b.mBg}}; color: {{b.mFg}}"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 99px; background: {{b.mDot}}"></span>{{b.miss}}</span></td>
+<td class="mono" style="padding: 12px 18px; text-align: right; color: #52514E">{{b.lat}}</td>
+</tr></sc-for></tbody>
+</table></div>
+</section>
+
+<sc-if value="{{hasHm}}">
+<section class="card" aria-label="Recall รายประเภท" style="margin-top: 16px; padding: 18px 20px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px">
+<div><h2 style="margin: 0; font-size: 15px; font-weight: 600">Recall รายประเภท</h2><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">ยิ่งเข้มยิ่งจับได้ครบ · ชี้ที่ช่องเพื่อดูจำนวนที่พลาด</div></div>
+<div aria-hidden="true" style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #898781"><span class="mono">0.40</span><span style="width: 140px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #CDE2FB, #86B6EF, #3987E5, #1C5CAB, #0D366B)"></span><span class="mono">1.00</span></div>
+</div>
+<div style="margin-top: 14px; overflow-x: auto">
+<div style="min-width: {{hmMin}}">
+<div style="display: grid; grid-template-columns: 240px repeat({{hmN}}, 1fr); gap: 3px; font-size: 12px; color: #52514E">
+<span></span>
+<sc-for list="{{hmCols}}" as="c"><span style="text-align: center; padding: 4px 2px">{{c.label}}</span></sc-for>
+</div>
+<sc-for list="{{hmRows}}" as="h">
+<div style="margin-top: 3px; display: grid; grid-template-columns: 240px repeat({{hmN}}, 1fr); gap: 3px">
+<span style="font-size: 12.5px; padding: 8px 8px 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{h.name}}</span>
+<sc-for list="{{h.cells}}" as="c">
+<div class="barrow" style="position: relative; display: flex; align-items: center; justify-content: center; height: 34px; border-radius: 4px; background: {{c.bg}}; color: {{c.fg}}; font: 500 12px/1 'IBM Plex Mono', monospace">{{c.v}}
+<div class="tipx" role="tooltip" style="position: absolute; z-index: 3; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #FFFFFF; border: 1px solid #E4E4DF; border-radius: 8px; box-shadow: 0 8px 24px -8px rgba(0,0,0,.25); padding: 6px 10px; font: 400 12px/1.5 Inter, 'IBM Plex Sans Thai', sans-serif; color: #52514E; white-space: nowrap">{{c.tip}}</div>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</div>
+<p style="margin: 14px 0 0; font-size: 12.5px; color: #71717A">{{boardNote}}</p>
+</section>
+</sc-if>
+</sc-if>
+</sc-if>
+</div>
+</main>

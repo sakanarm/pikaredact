@@ -1,0 +1,174 @@
+<main class="mainp" style="flex: 1; min-width: 0; margin: 10px 10px 10px 0; background: #FFFFFF; border: 1px solid #E7E7E2; border-radius: 16px; overflow: clip; display: flex; flex-direction: column">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-bottom: 1px solid #EFEFEA">
+<div style="font-size: 13.5px; color: #71717A; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"><a href="#/upload">ตรวจเอกสาร</a> <span style="margin: 0 6px">/</span><span style="color: #18181B; font-weight: 500">{{filename}}</span></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #52525B">
+<span style="display: inline-flex; align-items: center; gap: 6px; background: #F6F6F3; border: 1px solid #ECECE7; padding: 6px 10px; border-radius: 8px"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 99px; background: {{statusDot}}"></span>{{statusText}}</span>
+</div>
+</div>
+
+<div style="padding: 22px 28px 0; flex: 1">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; align-items: center; gap: 12px; min-width: 0">
+<span class="mono" style="flex: none; width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #FFFFFF; background: {{extColor}}">{{extLabel}}</span>
+<div style="min-width: 0">
+<h1 style="margin: 0; font-size: 22px; letter-spacing: -0.01em; font-weight: 650">ตรวจทีละจุด</h1>
+<div style="margin-top: 3px; font-size: 13.5px; color: #71717A">คลิกที่ไฮไลต์เพื่อเลือกหรือยกเลิก · ลากคลุมข้อความเพื่อเพิ่มเอง</div>
+</div>
+</div>
+<sc-if value="{{ready}}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<div role="radiogroup" aria-label="ผลลัพธ์ที่ต้องการ" style="display: inline-flex; padding: 3px; background: #F1F1EE; border-radius: 10px; gap: 2px">
+<sc-for list="{{outs}}" as="o">
+<button type="button" role="radio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 8px; padding: 8px 12px; min-height: 36px; font-size: 13.5px; font-weight: {{o.w}}; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}; box-shadow: {{o.sh}}"><span aria-hidden="true" style="width: 14px; height: 9px; border-radius: 2px; background: {{o.sw}}"></span>{{o.label}}</button>
+</sc-for>
+</div>
+<sc-if value="{{isRedact}}">
+<div role="radiogroup" aria-label="โหมดปิดบัง" style="display: inline-flex; border: 1px solid #E4E4DF; border-radius: 10px; overflow: hidden">
+<sc-for list="{{modes}}" as="m">
+<button type="button" role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" title="{{m.tip}}" style="border: 0; border-left: {{m.sep}}; padding: 8px 12px; min-height: 38px; font-size: 13px; cursor: pointer; background: {{m.bg}}; color: {{m.fg}}; font-weight: {{m.w}}">{{m.label}}</button>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{isHighlight}}">
+<span style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 8px 12px; border: 1px dashed #D4D4CF; border-radius: 10px; font-size: 13px; color: #3F3F46">{{hlBadge}}</span>
+</sc-if>
+<sc-if value="{{askOut}}">
+<span style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 8px 12px; border: 1px dashed #D4D4CF; border-radius: 10px; font-size: 13px; color: #52525B">เลือกผลลัพธ์ก่อนสร้างไฟล์ · ทำทั้งสองแบบได้</span>
+</sc-if>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{scanning}}">
+<section class="card" aria-live="polite" style="margin-top: 22px; padding: 28px; max-width: 640px">
+<div style="display: flex; align-items: center; gap: 12px"><span class="spin"></span><h2 style="margin: 0; font-size: 17px; font-weight: 600">{{stageLabel}}</h2></div>
+<div class="bar {{barCls}}" style="margin-top: 16px"><span style="width: {{barPct}}"></span></div>
+<div style="margin-top: 10px; display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: #71717A"><span>{{stageNote}}</span><span class="mono">{{elapsed}}</span></div>
+<ol style="margin: 20px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px">
+<sc-for list="{{steps}}" as="st">
+<li style="display: flex; align-items: center; gap: 10px; color: {{st.fg}}"><span aria-hidden="true" style="width: 18px; height: 18px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center; background: {{st.bg}}; border: 1px solid {{st.border}}"><sc-if value="{{st.done}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></sc-if></span>{{st.label}}</li>
+</sc-for>
+</ol>
+<div style="margin-top: 22px; display: flex; gap: 10px">
+<button type="button" onClick="{{cancel}}" style="border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 10px; padding: 9px 14px; font-size: 13.5px; font-weight: 500; cursor: pointer; min-height: 40px">ยกเลิกงานนี้</button>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{failed}}">
+<section class="card" role="alert" style="margin-top: 22px; padding: 28px; max-width: 640px; border-color: #FECACA; background: #FEF2F2">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600; color: #991B1B">ตรวจไฟล์นี้ไม่สำเร็จ</h2>
+<p style="margin: 8px 0 0; font-size: 14px; color: #7F1D1D; line-height: 1.6">{{errorText}}</p>
+<a href="#/upload" style="margin-top: 16px; display: inline-flex; align-items: center; border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 10px; padding: 9px 14px; font-size: 13.5px; font-weight: 500; min-height: 40px; box-sizing: border-box">กลับไปหน้าอัปโหลด</a>
+</section>
+</sc-if>
+
+<sc-if value="{{ready}}">
+<div style="margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px">
+<sc-for list="{{kpis}}" as="k">
+<div class="card" style="padding: 16px 18px">
+<div style="font-size: 13px; color: #52525B">{{k.label}}</div>
+<div style="margin-top: 8px; display: flex; align-items: baseline; gap: 8px"><span class="mono" style="font-size: 30px; font-weight: 500; letter-spacing: -0.02em">{{k.value}}</span><span style="font-size: 12.5px; color: #71717A">{{k.sub}}</span></div>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{showNote}}">
+<div role="note" style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 11px 14px; border-radius: 12px; background: #FFFBEB; border: 1px solid #FDE68A; font-size: 13.5px; color: #78350F">
+<sc-if value="{{hasSecret}}"><span style="display: inline-flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 3 2 21h20z"></path><path d="M12 10v5"></path><path d="M12 18h.01"></path></svg><span><b style="font-weight: 600">{{bannerHead}}</b> {{bannerBody}}</span></span></sc-if>
+<sc-for list="{{warnings}}" as="w"><span style="display: inline-flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><path d="M12 7.5h.01"></path></svg>{{w}}</span></sc-for>
+</div>
+</sc-if>
+
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; padding-bottom: 24px">
+
+<section class="card" aria-label="เอกสาร" style="flex: 999 1 560px; min-width: 0; overflow: hidden; position: relative">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #EFEFEA; background: #FCFCFB">
+<sc-for list="{{parts}}" as="pt">
+<button type="button" onClick="{{pt.go}}" style="font-size: 12.5px; padding: 6px 10px; border-radius: 7px; color: #3F3F46; background: #FFFFFF; border: 1px solid #ECECE7; cursor: pointer">{{pt.label}} <span class="mono" style="color: #71717A">{{pt.n}}</span></button>
+</sc-for>
+<div role="group" aria-label="มุมมอง" style="margin-left: auto; display: inline-flex; padding: 3px; background: #F1F1EE; border-radius: 9px; gap: 2px">
+<button type="button" onClick="{{viewSource}}" aria-pressed="{{isSource}}" style="border: 0; border-radius: 7px; padding: 6px 10px; min-height: 32px; font-size: 12.5px; font-weight: 500; cursor: pointer; background: {{srcBg}}; color: {{srcFg}}; box-shadow: {{srcSh}}">ต้นฉบับ</button>
+<button type="button" onClick="{{viewPreview}}" aria-pressed="{{isPreview}}" {{{pvDis}}} title="{{pvTip}}" style="border: 0; border-radius: 7px; padding: 6px 10px; min-height: 32px; font-size: 12.5px; font-weight: 500; cursor: pointer; background: {{pvBg}}; color: {{pvFg}}; box-shadow: {{pvSh}}">ตัวอย่างไฟล์ที่จะได้</button>
+</div>
+</div>
+<sc-if value="{{previewNote}}"><div style="padding: 8px 30px; font-size: 12.5px; color: #52525B; background: #F7F7F4; border-bottom: 1px solid #EFEFEA">{{previewNote}}</div></sc-if>
+<div data-slot="doc" style="padding: 22px 30px 26px; font-size: 15.5px; line-height: 2.05; color: #27272A"></div>
+<sc-if value="{{pop}}">
+<div class="addpop" role="dialog" aria-label="เพิ่มเป็นข้อมูลส่วนบุคคล" style="top: {{pop.top}}px; left: {{pop.left}}px">
+<div style="font-weight: 600">เพิ่มเป็นข้อมูลส่วนบุคคล</div>
+<div style="margin-top: 4px; font-size: 12.5px; color: #52525B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">“{{pop.text}}”</div>
+<div style="display: flex; gap: 8px; margin-top: 10px">
+<span aria-hidden="true" style="align-self: center; width: 8px; height: 8px; border-radius: 99px; background: {{pop.color}}; flex: none"></span>
+<label for="poptype" class="vh">ประเภท</label>
+<select id="poptype" class="sel" onChange="{{pop.setType}}" style="flex: 1; min-width: 0">
+<sc-for list="{{pop.types}}" as="o"><option value="{{o.value}}" {{{o.sel}}}>{{o.label}}</option></sc-for>
+</select>
+<button type="button" onClick="{{pop.add}}" style="border: 0; background: #18181B; color: #FFFFFF; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 500; cursor: pointer; min-height: 36px">เพิ่ม</button>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; margin-top: 10px; color: #52525B; cursor: pointer"><input type="checkbox" onChange="{{pop.toggleAll}}" {{{pop.allChecked}}} style="width: 15px; height: 15px; accent-color: #18181B; margin: 0">ปิดทุกที่ที่พบค่านี้ในไฟล์ <span class="mono" style="color: #71717A">({{pop.occ}} จุด)</span></label>
+<div style="margin-top: 8px; text-align: right"><button type="button" class="lnkbtn" onClick="{{pop.cancel}}" style="font-size: 12.5px; color: #52525B">ยกเลิก</button></div>
+</div>
+</sc-if>
+</section>
+
+<div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<section class="card" aria-label="รายการที่พบ" style="overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #EFEFEA">
+<div><h2 style="margin: 0; font-size: 15px; font-weight: 600">รายการที่พบ</h2><div style="font-size: 12.5px; color: #71717A; margin-top: 2px">{{listSub}}</div></div>
+<button type="button" role="switch" aria-checked="{{onlyReview}}" onClick="{{toggleReview}}" style="display: inline-flex; align-items: center; gap: 8px; border: 1px solid #E4E4DF; background: {{rvBg}}; border-radius: 8px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; min-height: 36px; color: #18181B">
+<span aria-hidden="true" style="width: 28px; height: 16px; border-radius: 99px; position: relative; background: {{rvTrack}}"><span style="position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 99px; background: #FFFFFF; transform: {{rvKnob}}"></span></span>เฉพาะที่ควรตรวจ</button>
+</div>
+<sc-if value="{{typeFilterOn}}">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: #F7F7F4; font-size: 12.5px; color: #3F3F46">กรอง: {{typeFilterLabel}}<button type="button" onClick="{{clearType}}" style="border: 0; background: none; color: #2563EB; font-size: 12.5px; cursor: pointer; min-height: 32px">ล้างตัวกรอง</button></div>
+</sc-if>
+<div data-keep-scroll="groups" style="max-height: 640px; overflow-y: auto">
+<sc-if value="{{noGroups}}"><div style="padding: 22px 16px; font-size: 13.5px; color: #71717A; border-top: 1px solid #F2F2EE">{{emptyText}}</div></sc-if>
+<sc-for list="{{groups}}" as="g">
+<div class="frow" style="display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid #F2F2EE; box-shadow: inset 3px 0 0 {{g.flag}}">
+<button type="button" role="switch" aria-checked="{{g.on}}" aria-label="{{g.aria}}" onClick="{{g.toggle}}" style="flex: none; margin-top: 2px; width: 36px; height: 22px; border-radius: 99px; border: 0; padding: 0; cursor: pointer; position: relative; background: {{g.track}}"><span aria-hidden="true" style="position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 99px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.25); transform: {{g.knob}}"></span></button>
+<div style="flex: 1; min-width: 0">
+<div style="display: flex; align-items: baseline; gap: 8px"><button type="button" onClick="{{g.locate}}" title="ดูในเอกสาร" style="border: 0; background: none; padding: 0; cursor: pointer; text-align: left; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: {{g.deco}}; color: {{g.textFg}}">{{g.text}}</button><span class="mono" style="flex: none; font-size: 12px; color: #71717A">×{{g.count}}</span></div>
+<div style="margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px">
+<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 6px; background: #F4F4F1; color: #3F3F46"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 99px; background: {{g.color}}"></span>{{g.typeLabel}}</span>
+<span style="color: #71717A">{{g.src}}</span>
+<sc-if value="{{g.review}}"><span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 6px; background: #FEF3C7; color: #92400E"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 7v6"></path><path d="M12 17h.01"></path></svg>ควรตรวจ</span></sc-if>
+<sc-if value="{{g.manual}}"><button type="button" class="lnkbtn" onClick="{{g.remove}}" style="font-size: 12px; color: #B91C1C">ลบรายการนี้</button></sc-if>
+</div>
+</div>
+<div style="flex: none; text-align: right; width: 52px">
+<div class="mono" style="font-size: 12.5px; color: #3F3F46">{{g.score}}</div>
+<div aria-hidden="true" style="margin-top: 6px; height: 4px; border-radius: 99px; background: #EFEFEA; overflow: hidden"><div style="height: 100%; border-radius: 99px; width: {{g.scorePct}}; background: {{g.scoreColor}}"></div></div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section class="card" aria-label="ประเภทที่พบ" style="padding: 16px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">ประเภทที่พบ</h2>
+<div style="font-size: 12.5px; color: #71717A; margin-top: 2px">จำนวนจุด · คลิกเพื่อกรอง</div>
+<div style="margin-top: 10px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{types}}" as="t">
+<button type="button" class="trow" onClick="{{t.pick}}" aria-pressed="{{t.on}}" style="display: block; padding: 7px 8px; border-radius: 8px; background: {{t.bg}}; min-height: 40px">
+<span style="display: flex; justify-content: space-between; font-size: 13px; color: #27272A"><span style="display: inline-flex; align-items: center; gap: 7px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 99px; background: {{t.color}}"></span>{{t.label}}</span><span class="mono" style="font-variant-numeric: tabular-nums">{{t.n}}</span></span>
+<span aria-hidden="true" style="display: block; margin-top: 6px; height: 6px; border-radius: 99px; background: #F1F1EE"><span style="display: block; height: 100%; border-radius: 99px; width: {{t.pct}}; background: #2A78D6"></span></span>
+</button>
+</sc-for>
+</div>
+</section>
+</div>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{ready}}">
+<div style="position: sticky; bottom: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-top: 1px solid #E7E7E2; background: rgba(255,255,255,.96)">
+<div style="font-size: 14px; color: #3F3F46">{{verb}} <b class="mono" style="font-weight: 600; color: #18181B">{{acceptedN}}</b> จุด จาก {{totalN}} · <b style="font-weight: 600; color: #18181B">{{outDesc}}</b><span style="display: block; margin-top: 2px; font-size: 12.5px; color: #71717A">{{outNote}}</span><sc-if value="{{exportError}}"><span role="alert" style="display: block; margin-top: 4px; font-size: 12.5px; color: #B91C1C">{{exportError}}</span></sc-if></div>
+<div style="display: flex; gap: 10px">
+<button type="button" onClick="{{back}}" style="display: inline-flex; align-items: center; border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 500; min-height: 44px; box-sizing: border-box; cursor: pointer">ย้อนกลับ</button>
+<button type="button" onClick="{{exportNow}}" {{{ctaDis}}} style="display: inline-flex; align-items: center; gap: 8px; border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 500; min-height: 44px; box-sizing: border-box; cursor: pointer"><sc-if value="{{exporting}}"><span class="spin" style="border-color: #52525B; border-top-color: #FFFFFF"></span></sc-if>{{ctaLabel}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg></button>
+</div>
+</div>
+</sc-if>
+</main>

@@ -40,9 +40,18 @@ class Segment:
     kind: str = "body"    # body|table|header|footer|comment|note|metadata|hidden|deleted|link|chart|field
     cell: tuple | None = None  # (table_key, row, col) when the text sits in a table/sheet cell
 
+    def cells(self) -> list[list]:
+        """Every (table_key, row, col) this segment fills; xlsx shared strings can fill several."""
+        c = self.cell
+        if not c:
+            return []
+        items = c if isinstance(c, list) else [c]
+        return [[str(k), int(r), int(col)] for k, r, col in items]
+
     def to_json(self) -> dict:
         d = asdict(self)
         d.pop("cell", None)
+        d["cells"] = self.cells()
         return d
 
 
