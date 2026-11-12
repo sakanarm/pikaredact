@@ -33,14 +33,34 @@ const TYPE_INFO = {
   PERSON: ["สมชาย ใจดี", "NER · รายชื่อ · AI"], ORGANIZATION: ["บริษัท เอบีซี จำกัด", "รายชื่อ · AI"],
   ADDRESS: ["99/1 ถ.พระราม 9", "NER · AI"], PHONE: ["081-234-5678", "กฎ"], EMAIL: ["name@example.com", "กฎ"],
   TH_ID_CARD: ["1-1037-00123-45-8", "กฎ · checksum"], PASSPORT: ["AA1234567", "กฎ · บริบท"],
+  LICENSE_NUMBER: ["ใบขับขี่ 62001234", "กฎ · บริบท"],
   BANK_ACCOUNT: ["123-4-56789-0", "กฎ · บริบท"], CREDIT_CARD: ["4111 •••• •••• 1111", "กฎ · Luhn"],
-  TH_LICENSE_PLATE: ["1กข 1234", "กฎ"], DATE_OF_BIRTH: ["12/03/2530", "กฎ · บริบท"], IP_ADDRESS: ["10.20.30.41", "กฎ"],
-  OTHER_ID: ["EMP-00412", "ตาราง · AI"], SECRET: ["DB_PASSWORD=…", "กฎ"],
+  CARD_SECURITY: ["CVV 123 · 08/27", "กฎ · บริบท"], SALARY: ["เงินเดือน 45,000 บาท", "กฎ · บริบท"],
+  TH_LICENSE_PLATE: ["1กข 1234", "กฎ"], DATE_OF_BIRTH: ["12/03/2530", "กฎ · บริบท"],
+  MEDICAL_RECORD: ["HN 65-012345", "กฎ · ตาราง"], INSURANCE_ID: ["กรมธรรม์ 1234-567890", "กฎ · ตาราง"],
+  IP_ADDRESS: ["10.20.30.41", "กฎ"], DEVICE_ID: ["00:1A:2B:3C:4D:5E", "กฎ · checksum"],
+  GPS_LOCATION: ["13.7563, 100.5018", "กฎ"], SOCIAL_MEDIA: ["LINE ID: somchai_t", "กฎ · บริบท"],
+  URL: ["https://example.com/u/12", "กฎ"], OTHER_ID: ["EMP-00412", "ตาราง · AI"],
+  HEALTH: ["โรคประจำตัว: เบาหวาน", "กฎ · บริบท · AI"], DISABILITY: ["ความพิการทางการเห็น", "กฎ · AI"],
+  GENETIC: ["BRCA1 positive", "กฎ · AI"], BIOMETRIC: ["ลายนิ้วมือ: 3f2a…", "กฎ · AI"],
+  RELIGION: ["นับถือศาสนา…", "กฎ · AI"], RACE_ETHNICITY: ["เชื้อชาติ: …", "กฎ · AI"],
+  POLITICAL_OPINION: ["สมาชิกพรรค…", "กฎ · AI"], SEXUAL_BEHAVIOR: ["รสนิยมทางเพศ: …", "กฎ · AI"],
+  CRIMINAL_RECORD: ["เคยต้องโทษคดี…", "กฎ · AI"], TRADE_UNION: ["กรรมการสหภาพแรงงาน", "กฎ · AI"],
+  SECRET: ["DB_PASSWORD=…", "กฎ"],
 };
 const TYPE_ORDER = Object.keys(TYPE_INFO);
 
+/* rule packs: badge per kind of source */
+const KIND_BADGE = {
+  "law:th": ["กฎหมายไทย", "#EEF2FF", "#3730A3"], "law:intl": ["กฎหมายต่างประเทศ", "#F0F9FF", "#075985"],
+  "standard:th": ["มาตรฐาน", "#ECFDF5", "#065F46"], "standard:intl": ["มาตรฐานสากล", "#ECFDF5", "#065F46"],
+  "policy:th": ["นโยบายองค์กร", "#F4F4F5", "#52525B"], "policy:intl": ["นโยบายองค์กร", "#F4F4F5", "#52525B"],
+};
+const CHIP_MAX = 6;
+
 const S = {
   tab: "conn", sel: null, draft: null, saving: false,
+  packOpen: {}, // pack id -> details expanded
   models: {},   // connector -> { busy, list, error }
   tests: {},    // connector -> { busy, res }
   lists: {},    // list name -> { loading, loaded, content, count, updated, q, editing, draft, busy, error, note }
@@ -122,6 +142,7 @@ async function runTest(name) {
 
 async function saveSettings(patch, note) {
   const s = await PR.api("api/settings", PR.json("PUT", patch));
+  if (s.active_types) cfg().active_types = s.active_types;
   cfg().settings = s;
   if (PR.resetUploadDefaults) PR.resetUploadDefaults();
   if (note) {
@@ -396,27 +417,72 @@ function ruleVals() {
   const thRows = [[`< ${f2(lo)}`, "ไม่แสดง"], [`${f2(lo)}–${f2(mid)}`, "แสดง แต่ไม่เลือกไว้ ให้คนตัดสิน"],
     [`${f2(mid)}–${f2(hi)}`, "เลือกไว้ และติดป้าย “ควรตรวจ”"], [`≥ ${f2(hi)}`, "เลือกไว้ มั่นใจ"]].map((r) => ({ range: r[0], text: r[1] }));
 
+  /* rule packs (law / standard) */
+  const packList = C.packs || [];
+  const packsOn = new Set(st.packs_on || []);
+  const covered = new Set(["SECRET"]);
+  for (const p of packList) if (p.locked || packsOn.has(p.id)) p.types.forEach((t) => covered.add(t));
+  const setPacks = (ids) => {
+    const want = new Set(ids);
+    const next = packList.filter((x) => x.locked || want.has(x.id)).map((x) => x.id);
+    st.packs_on = next;
+    putRule({ packs_on: next });
+  };
+  let packsOnN = 0;
+  const packs = packList.map((p) => {
+    const on = p.locked || packsOn.has(p.id);
+    if (on) packsOnN++;
+    const s = sw(on, 14);
+    const b = KIND_BADGE[`${p.kind}:${p.region}`] || KIND_BADGE["policy:th"];
+    const chipOf = (t) => ({ label: PR.type(t).label, color: (C.entity_types[t] || {}).color || PR.type(t).line });
+    const open = !!S.packOpen[p.id];
+    return {
+      id: p.id, name: p.name, short: p.short, law: p.law, sections: p.sections, desc: p.desc,
+      kindLabel: b[0], kindBg: b[1], kindFg: b[2], locked: p.locked, on: String(on),
+      track: p.locked ? "#52525B" : s.track, knob: s.knob, cursor: p.locked ? "not-allowed" : "pointer",
+      border: on ? "#18181B" : "#E7E7E2", nameFg: on ? "#18181B" : "#52525B",
+      chips: p.types.slice(0, CHIP_MAX).map(chipOf), more: p.types.length > CHIP_MAX ? `+${p.types.length - CHIP_MAX} ประเภท` : "",
+      allChips: p.types.map(chipOf), nTypes: String(p.types.length), open,
+      openLabel: open ? "ซ่อนรายละเอียด" : "ดูมาตราและประเภทข้อมูลทั้งหมด",
+      expand: () => { S.packOpen[p.id] = !open; },
+      toggle: () => {
+        if (p.locked) return false;
+        setPacks(on ? [...packsOn].filter((x) => x !== p.id) : [...packsOn, p.id]);
+      },
+    };
+  });
+  const packsAll = () => setPacks(packList.map((p) => p.id));
+  const packsDefault = () => setPacks(packList.filter((p) => p.default).map((p) => p.id));
+
   const off = new Set(st.types_off || []);
   const tm = st.type_modes || {};
   const all = Object.keys(C.entity_types || {});
   const order = [...TYPE_ORDER.filter((t) => all.includes(t) && t !== "SECRET"), ...all.filter((t) => !TYPE_INFO[t]),
     ...(all.includes("SECRET") ? ["SECRET"] : [])];
-  let typesOn = 0;
+  let typesOn = 0, firstSensitive = true;
   const types = order.map((t, i) => {
     const locked = t === "SECRET";
-    const on = locked || !off.has(t);
+    const inPack = covered.has(t);
+    const on = locked || (inPack && !off.has(t));
     if (on) typesOn++;
     const s = sw(on, 14);
     const info = TYPE_INFO[t] || ["", ""];
     const cur = tm[t] || "";
+    const pt = PR.type(t);
+    let head = "";
+    if (!i) head = "ข้อมูลส่วนบุคคลทั่วไปและตัวระบุ";
+    if (pt.sensitive && firstSensitive) { head = "ข้อมูลอ่อนไหว (PDPA มาตรา 26) · โหมดปิดบางส่วนจะปิดทั้งค่า"; firstSensitive = false; }
+    if (locked) head = "ความลับทางเทคนิค";
     return {
-      label: PR.type(t).label, color: (C.entity_types[t] || {}).color || PR.type(t).line, ex: info[0], src: info[1],
-      on: String(on), locked, unlocked: !locked, sep: i ? "1px solid #F2F2EE" : "0",
-      track: locked ? "#52525B" : s.track, knob: s.knob, cursor: locked ? "not-allowed" : "pointer", fg: on ? "#18181B" : "#A1A1AA",
+      head, label: pt.label, color: (C.entity_types[t] || {}).color || pt.line, ex: info[0], src: info[1],
+      law: inPack ? pt.law : "ไม่มีชุดกฎที่เปิดครอบคลุม · เปิดชุดกฎด้านบนก่อน", lawFg: inPack ? "#898781" : "#B45309",
+      on: String(on), locked, unlocked: !locked, sep: i && !head ? "1px solid #F2F2EE" : "0",
+      track: locked ? "#52525B" : (inPack ? s.track : "#ECECE8"), knob: s.knob,
+      cursor: locked || !inPack ? "not-allowed" : "pointer", fg: on ? "#18181B" : "#A1A1AA", dis: String(locked || !inPack),
       selFg: cur ? "#18181B" : "#71717A",
       opts: [{ v: "", label: "ตามโหมดที่เลือก", sel: cur ? "" : "selected" }, ...modes.map((m) => ({ v: m, label: PR.modeLabel(m), sel: m === cur ? "selected" : "" }))],
       toggle: () => {
-        if (locked) return false;
+        if (locked || !inPack) return false;
         const next = on ? [...off, t] : [...off].filter((x) => x !== t);
         st.types_off = next;
         putRule({ types_off: next });
@@ -434,6 +500,7 @@ function ruleVals() {
   return {
     outDefaults, modeOpts, setMode: (ev) => { st.mode = ev.target.value; putRule({ mode: ev.target.value }); },
     thGrad, thMarks, thRows, types, typesOn: String(typesOn), typesAll: String(order.length), savedNote: S.savedNote,
+    packs, packsOnN: String(packsOnN), packsAllN: String(packList.length), packsAll, packsDefault,
   };
 }
 

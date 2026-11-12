@@ -188,10 +188,14 @@ const TYPE_COLORS = {
   DATE_OF_BIRTH: ["#F3E8FF", "#9333EA", "#6B21A8"], TH_LICENSE_PLATE: ["#EDE9FE", "#7C3AED", "#5B21B6"],
 };
 PR.type = (t) => {
-  const c = TYPE_COLORS[t] || ["#F1F5F9", "#64748B", "#334155"];
   const et = (PR.cfg && PR.cfg.entity_types[t]) || {};
-  return { label: et.label || t, bg: c[0], line: c[1], fg: c[2] };
+  // newer types: tint the server colour (8-digit hex = colour + alpha)
+  const c = TYPE_COLORS[t] || (et.color ? [et.color + "1F", et.color, et.color] : ["#F1F5F9", "#64748B", "#334155"]);
+  const law = ((PR.cfg && PR.cfg.law) || {})[t] || [];
+  return { label: et.label || t, bg: c[0], line: c[1], fg: c[2], sensitive: !!et.sensitive, law: law.join(" · ") };
 };
+/* types the current settings will look for (packs on, minus per-type switches) */
+PR.activeTypes = () => new Set((PR.cfg && PR.cfg.active_types) || Object.keys((PR.cfg && PR.cfg.entity_types) || {}));
 PR.modeLabel = (m) => ({ remove: "ลบทิ้ง", mask: "ปิดบางส่วน", token: "แทนด้วยรหัส", fake: "ข้อมูลปลอม" }[m] || m);
 
 /* ---------------------------------------------------------------- toast */

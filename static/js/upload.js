@@ -30,6 +30,7 @@ function init() {
   S.combine = st.combine === "vote" ? "vote" : "union";
   S.minAgree = st.min_agree || 2;
   S.sanitize = st.sanitize !== false;
+  S.packs = [...(st.packs_on || [])];
   S.init = true;
 }
 /* settings changed: pick up the new defaults next time the upload page opens */
@@ -67,7 +68,16 @@ function options() {
     min_agree: agree,
     layers: { ner: S.layers.ner, list: S.layers.list },
     sanitize: S.sanitize,
+    packs: S.packs,
   };
+}
+
+/* entity types this job will look for: packs picked here, minus the per-type switches in settings */
+function packTypes() {
+  const off = new Set((PR.cfg.settings || {}).types_off || []);
+  const on = new Set(["SECRET"]);
+  for (const p of PR.cfg.packs || []) if (p.locked || S.packs.includes(p.id)) p.types.forEach((t) => on.add(t));
+  return [...on].filter((t) => t === "SECRET" || !off.has(t));
 }
 
 async function start() {
@@ -166,6 +176,19 @@ function vals() {
       },
     };
   });
+  const packs = (cfg.packs || []).map((p) => {
+    const on = p.locked || S.packs.includes(p.id);
+    return {
+      name: p.name, short: p.short, on: String(on), locked: p.locked, tip: `${p.law}${p.locked ? " · เปิดเสมอ" : ""}`,
+      border: on ? "#18181B" : "#E4E4DF", bg: on ? "#18181B" : "#FFFFFF", fg: on ? "#FFFFFF" : "#3F3F46",
+      cursor: p.locked ? "default" : "pointer",
+      toggle: () => {
+        if (p.locked) return false;
+        S.packs = on ? S.packs.filter((x) => x !== p.id) : S.packs.concat(p.id);
+      },
+    };
+  });
+  const nTypes = packTypes().length;
   const san = sw(S.sanitize);
   const valid = S.files.filter((f) => !f.err).length;
   const ai = useAI();
@@ -198,7 +221,7 @@ function vals() {
     accept: cfg.supported.join(","), maxMb: cfg.max_upload_mb,
     files, pasteText: S.text, pasteCount: PR.num(S.text.length),
     onPaste: (ev) => { S.text = ev.target.value; S.error = ""; },
-    layers, aiOn: S.ai, noProfiles: !(cfg.profiles || []).length, profiles,
+    layers, packs, packNote: `ตรวจ ${nTypes} ประเภทข้อมูล · เปลี่ยนเฉพาะงานนี้ ค่าเริ่มต้นตั้งที่หน้าการตรวจจับ`, aiOn: S.ai, noProfiles: !(cfg.profiles || []).length, profiles,
     multi: S.ai && nPicked > 1, combines,
     combineNote: S.combine === "vote" ? "กดอีกครั้งเพื่อเปลี่ยนจำนวน · มีผลกับผลจาก AI เท่านั้น" : "จับได้มากที่สุด",
     sanitize: String(S.sanitize), sanTrack: san.track, sanKnob: san.knob, toggleSanitize: () => { S.sanitize = !S.sanitize; },

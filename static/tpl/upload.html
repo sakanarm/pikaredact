@@ -93,6 +93,14 @@
 </sc-for>
 </div>
 
+<div style="margin-top: 14px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px"><span style="font-weight: 500">ชุดกฎตามกฎหมาย / มาตรฐาน</span><a href="#/settings/rules" style="color: #2563EB; font-size: 12.5px">รายละเอียด</a></div>
+<div role="group" aria-label="ชุดกฎสำหรับงานนี้" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{packs}}" as="p"><button type="button" role="checkbox" aria-checked="{{p.on}}" aria-disabled="{{p.locked}}" onClick="{{p.toggle}}" title="{{p.tip}}" style="display: inline-flex; align-items: center; gap: 5px; border: 1px solid {{p.border}}; background: {{p.bg}}; color: {{p.fg}}; border-radius: 99px; padding: 5px 11px; min-height: 32px; font-size: 12.5px; cursor: {{p.cursor}}"><sc-if value="{{p.locked}}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></sc-if>{{p.name}}</button></sc-for>
+</div>
+<div style="margin-top: 6px; font-size: 12px; color: #71717A">{{packNote}}</div>
+</div>
+
 <sc-if value="{{aiOn}}">
 <div style="margin-top: 12px">
 <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px"><span style="font-weight: 500">AI connector สำหรับงานนี้</span><a href="#/settings/conn" style="color: #2563EB; font-size: 12.5px">จัดการ</a></div>

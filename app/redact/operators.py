@@ -13,12 +13,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from ..detect.gazetteer import norm_key
-from ..models import ENTITY_TYPES, MODES, Finding
+from ..models import ENTITY_TYPES, MODES, SENSITIVE_TYPES, Finding
+from ..packs import law_map
 from ..normalize import normalize
 from .fake_th import FakeTH
 
 REMOVED = "████"
-_DIGIT_TYPES = {"PHONE", "TH_ID_CARD", "BANK_ACCOUNT", "CREDIT_CARD"}
+_DIGIT_TYPES = {"PHONE", "TH_ID_CARD", "BANK_ACCOUNT", "CREDIT_CARD", "INSURANCE_ID"}
+# hidden completely even in "mask" mode: a partial value still gives the fact away
+_HIDE_ALL = SENSITIVE_TYPES | {"SECRET", "ADDRESS", "DATE_OF_BIRTH", "SALARY", "GPS_LOCATION", "URL"}
 _ALNUM = re.compile(r"[0-9A-Za-zก-๎]")  # Thai vowels/tone marks too, so "ใจดี" never shows as "ใจxี"
 
 
@@ -56,8 +59,12 @@ def mask_value(entity_type: str, value: str) -> str:
         return ".".join(octs[:2] + ["xxx"] * (len(octs) - 2)) if len(octs) == 4 else _mask_chars(v, 0, 0)
     if entity_type in ("PERSON", "ORGANIZATION"):
         return " ".join(_mask_chars(w, 1, 0) for w in v.split(" "))
-    if entity_type in ("SECRET", "ADDRESS", "DATE_OF_BIRTH"):
+    if entity_type in _HIDE_ALL:
         return "xxxx"
+    if entity_type == "CARD_SECURITY":
+        return "xxx"
+    if entity_type in ("DEVICE_ID", "MEDICAL_RECORD", "INSURANCE_ID", "LICENSE_NUMBER"):
+        return _mask_chars(v, 0, 2)
     return _mask_chars(v, 1, 1)
 
 
@@ -149,11 +156,13 @@ def findings_csv(findings: list[Finding], seg_labels: dict[str, str], replaced: 
 
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["ลำดับ", "ประเภท", "ตำแหน่ง", "ค่า (ปิดบางส่วน)", "คะแนน", "พบโดย", "ผลลัพธ์"])
+    laws = law_map()
+    w.writerow(["ลำดับ", "ประเภท", "ตำแหน่ง", "ค่า (ปิดบางส่วน)", "คะแนน", "พบโดย", "ผลลัพธ์", "ฐานกฎหมาย / มาตรฐาน"])
     for i, f in enumerate(findings, 1):
         res = "ไฮไลต์" if highlight else (replaced or {}).get(f.id, "")
         if f.entity_type == "SECRET" and not highlight:
             res = "ลบทิ้ง"
         w.writerow([i, ENTITY_TYPES.get(f.entity_type, {}).get("label", f.entity_type), seg_labels.get(f.seg_id, ""),
-                    mask_value(f.entity_type, f.text), f"{f.score:.2f}", LAYER_LABELS.get(primary_layer(f), ""), res])
+                    mask_value(f.entity_type, f.text), f"{f.score:.2f}", LAYER_LABELS.get(primary_layer(f), ""), res,
+                    " · ".join(laws.get(f.entity_type, []))])
     return ("﻿" + buf.getvalue()).encode("utf-8")

@@ -7,10 +7,14 @@ import re
 from faker import Faker
 
 from ..detect.validators import thai_id_check_digit
+from ..models import ENTITY_TYPES, SENSITIVE_TYPES
 
 _TH_CONS = "กขคงจฉชซญฎฏฐฑฒณดตถทธนบปผพฟภมยรลวศษสหฬอฮ"
 _PLATE_CONS = "กขคงจฉชซฌญฎฐฒณดตถทธนบผพฟภมยรลวศษสหฬอฮ"
 _LATIN = re.compile(r"[A-Za-z]")
+_MAC = re.compile(r"(?i)^[0-9a-f]{2}([:-])(?:[0-9a-f]{2}){4}[0-9a-f]{2}$")
+# a fake disease or religion would put a false fact about a real person into the file: use a neutral label instead
+_PLACEHOLDER = SENSITIVE_TYPES | {"GPS_LOCATION"}
 
 
 def reshape(value: str, rng: random.Random) -> str:
@@ -44,6 +48,7 @@ class FakeTH:
         self.th.seed_instance(s)
         self.en.seed_instance(s + 1)
         self.n_email = 0
+        self.n_social = 0
 
     def make(self, entity_type: str, value: str) -> str:
         r = self.rng
@@ -70,6 +75,20 @@ class FakeTH:
         if entity_type == "TH_ID_CARD":
             first12 = str(r.randrange(1, 9)) + "".join(str(r.randrange(10)) for _ in range(11))
             return _fill_digits(value, first12 + thai_id_check_digit(first12))
+        if entity_type in _PLACEHOLDER:
+            return f"[{ENTITY_TYPES[entity_type]['label'].split(' (')[0]}]"
+        if entity_type == "URL":
+            return "https://example.com/"
+        if entity_type == "SOCIAL_MEDIA":
+            self.n_social += 1
+            if "/" in value:
+                return f"https://example.com/user{self.n_social:03d}"
+            return ("@" if value.startswith("@") else "") + f"user{self.n_social:03d}"
+        if entity_type == "DEVICE_ID" and _MAC.match(value.strip()):
+            sep = _MAC.match(value.strip()).group(1)
+            return sep.join(f"{r.randrange(256):02X}" for _ in range(6))
+        if entity_type == "IP_ADDRESS" and ":" in value:
+            return f"2001:db8::{r.randrange(1, 0xffff):x}"  # documentation prefix, never routable
         if entity_type == "IP_ADDRESS":
             suffix = value[value.index("/"):] if "/" in value else ""
             return f"192.0.2.{r.randrange(1, 255)}{suffix}"  # TEST-NET-1, never routable

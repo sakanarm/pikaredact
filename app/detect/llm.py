@@ -24,14 +24,17 @@ NON_CHAT = re.compile(r"(?i)(embed|whisper|tts|rerank|moderation|dall-?e|image|v
 
 SYSTEM_PROMPT = """You find personal and confidential data in Thai/English IT documents (requirements, test cases, designs, proposals, meeting notes).
 Return ONLY JSON: {"items":[{"text":"<exact substring>","type":"<TYPE>"}]}
-TYPE is one of: PERSON, ORGANIZATION, ADDRESS, PHONE, EMAIL, TH_ID_CARD, BANK_ACCOUNT, CREDIT_CARD, PASSPORT, DATE_OF_BIRTH, OTHER_ID, SECRET, IP_ADDRESS, TH_LICENSE_PLATE.
+TYPE is one of: PERSON, ORGANIZATION, ADDRESS, PHONE, EMAIL, TH_ID_CARD, BANK_ACCOUNT, CREDIT_CARD, CARD_SECURITY, PASSPORT, LICENSE_NUMBER, MEDICAL_RECORD, INSURANCE_ID, DATE_OF_BIRTH, OTHER_ID, SECRET, IP_ADDRESS, DEVICE_ID, GPS_LOCATION, SOCIAL_MEDIA, TH_LICENSE_PLATE, SALARY, HEALTH, DISABILITY, GENETIC, BIOMETRIC, RELIGION, RACE_ETHNICITY, POLITICAL_OPINION, SEXUAL_BEHAVIOR, CRIMINAL_RECORD, TRADE_UNION.
 Rules:
 - "text" must be copied character-for-character from the input. Do not translate, fix spelling, or add titles.
 - PERSON: real people's names incl. Thai nicknames (e.g. "พี่ต้น", "น้องเมย์"), English names, signatures. Do NOT include titles like นาย/นาง/คุณ/Mr. Do NOT include job roles ("ผู้จัดการ", "Admin", "Tester").
 - ORGANIZATION: client/partner company or agency names. NOT software products, cloud services, standards or well-known vendors used as technology (Microsoft Azure, Oracle, SAP, AWS, Kubernetes).
-- OTHER_ID: employee IDs, customer IDs, usernames, member numbers, HN, case numbers tied to a person.
+- OTHER_ID: employee IDs, customer IDs, usernames, member numbers tied to a person.
+- MEDICAL_RECORD: hospital numbers (HN/AN/MRN). INSURANCE_ID: insurance policy or social-security numbers. LICENSE_NUMBER: driving or professional licence numbers.
+- DEVICE_ID: MAC, IMEI, VIN, device serial numbers. SOCIAL_MEDIA: LINE IDs, social handles and profile links of people. SALARY: a person's salary or income amount. CARD_SECURITY: card CVV or expiry.
 - SECRET: passwords, API keys, tokens, connection strings with credentials.
 - ADDRESS: postal addresses of people or offices (house number, road, district, province, postcode).
+- Sensitive data (HEALTH, DISABILITY, GENETIC, BIOMETRIC, RELIGION, RACE_ETHNICITY, POLITICAL_OPINION, SEXUAL_BEHAVIOR, CRIMINAL_RECORD, TRADE_UNION): only when it describes a specific person (e.g. "ป่วยเป็นเบาหวาน", "นับถือศาสนาอิสลาม", "เคยต้องโทษคดียาเสพติด"). Return only the fact itself (the disease, the religion, the offence), not the person's name and not the whole sentence. Skip general text that is not about a person (e.g. a hospital name, a law, a holiday).
 - Skip placeholders and templates such as "xxx", "<name>", "ชื่อ-นามสกุล", "081-xxx-xxxx".
 - When unsure, include it (missing personal data is worse than an extra item).
 If nothing is found return {"items":[]}."""

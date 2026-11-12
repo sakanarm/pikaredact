@@ -500,6 +500,7 @@ function vals() {
       flag: g.review ? "#F59E0B" : "transparent", on: String(g.on), aria: `${g.on ? "ยกเลิก" : "เลือก"} ${g.text}`,
       track: s.track, knob: s.knob, deco: g.on ? "none" : "line-through", textFg: g.on ? "#18181B" : "#71717A",
       text: g.text, count: g.items.length, color: t.line, typeLabel: t.label, src: g.src, review: g.review,
+      law: t.law ? `ฐานกฎหมาย / มาตรฐาน: ${t.law}` : "", sensitive: t.sensitive,
       manual: g.manual, score: g.score.toFixed(2), scorePct: `${Math.round(g.score * 100)}%`,
       scoreColor: g.review ? "#F59E0B" : "#2A78D6",
       toggle: () => { const v = !g.on; g.items.forEach((f) => { st.on[f.id] = v; }); },
@@ -523,7 +524,7 @@ function vals() {
       on: String(st.typeFilter === k), bg: st.typeFilter === k ? "#F1F1EE" : "transparent",
       pick: () => { st.typeFilter = st.typeFilter === k ? "" : k; } };
   });
-  const enabledTypes = Object.keys(cfg.entity_types).filter((t) => !((cfg.settings || {}).types_off || []).includes(t)).length;
+  const enabledTypes = ((j.options || {}).entities || [...PR.activeTypes()]).length;
 
   // parts chips (one per coarse location)
   const perGroup = {};

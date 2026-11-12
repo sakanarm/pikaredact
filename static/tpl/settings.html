@@ -147,7 +147,45 @@
 </sc-if>
 
 <sc-if value="{{isRules}}">
-<div style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<section class="card" aria-label="ชุดกฎตามกฎหมายและมาตรฐาน" style="margin-top: 20px; padding: 16px 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px">
+<div style="min-width: 0"><h2 style="margin: 0; font-size: 15px; font-weight: 600">ชุดกฎตามกฎหมายและมาตรฐาน</h2>
+<div style="margin-top: 2px; font-size: 12.5px; color: #71717A">เปิด {{packsOnN}} จาก {{packsAllN}} ชุด · ตรวจ {{typesOn}} ประเภทข้อมูล · ประเภทที่ชุดกฎหลายชุดครอบคลุมจะตรวจครั้งเดียว</div></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-if value="{{savedNote}}"><span role="status" style="align-self: center; font-size: 12.5px; color: #166534">{{savedNote}}</span></sc-if>
+<button type="button" onClick="{{packsDefault}}" style="border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 9px; padding: 6px 12px; min-height: 34px; font-size: 12.5px; cursor: pointer">ค่าแนะนำ</button>
+<button type="button" onClick="{{packsAll}}" style="border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 9px; padding: 6px 12px; min-height: 34px; font-size: 12.5px; cursor: pointer">เปิดทุกชุด</button>
+</div>
+</div>
+<div style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; align-items: start">
+<sc-for list="{{packs}}" as="p">
+<div role="group" aria-label="{{p.name}}" style="border: 1px solid {{p.border}}; border-radius: 12px; padding: 12px 14px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<button type="button" role="switch" aria-checked="{{p.on}}" aria-label="เปิดชุดกฎ {{p.name}}" aria-disabled="{{p.locked}}" onClick="{{p.toggle}}" style="flex: none; margin-top: 1px; width: 36px; height: 22px; border-radius: 99px; border: 0; padding: 0; cursor: {{p.cursor}}; position: relative; background: {{p.track}}"><span aria-hidden="true" style="position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 99px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.25); transform: {{p.knob}}"></span></button>
+<div style="flex: 1; min-width: 0">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span style="font-size: 14px; font-weight: 600; color: {{p.nameFg}}">{{p.name}}</span></div>
+<div style="margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+<span style="font-size: 11px; font-weight: 500; border-radius: 99px; padding: 1px 8px; background: {{p.kindBg}}; color: {{p.kindFg}}">{{p.kindLabel}}</span>
+<span class="mono" style="font-size: 11.5px; color: #3F3F46">{{p.short}}</span>
+<sc-if value="{{p.locked}}"><span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #52525B; border: 1px solid #E7E7E2; border-radius: 99px; padding: 0 7px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>เปิดเสมอ</span></sc-if>
+</div>
+</div>
+</div>
+<div style="font-size: 12.5px; color: #3F3F46; font-weight: 500">{{p.law}}</div>
+<div style="font-size: 12.5px; color: #52525B">{{p.desc}}</div>
+<sc-if value="{{!p.open}}"><div style="display: flex; flex-wrap: wrap; gap: 4px"><sc-for list="{{p.chips}}" as="c"><span style="display: inline-flex; align-items: center; gap: 5px; border: 1px solid #EFEFEA; border-radius: 99px; padding: 1px 8px; font-size: 11.5px; color: #3F3F46"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 99px; background: {{c.color}}"></span>{{c.label}}</span></sc-for><sc-if value="{{p.more}}"><span style="font-size: 11.5px; color: #71717A; padding: 1px 4px">{{p.more}}</span></sc-if></div></sc-if>
+<sc-if value="{{p.open}}">
+<sc-if value="{{p.sections}}"><div style="font-size: 12px; color: #52525B; background: #F7F7F4; border-radius: 8px; padding: 8px 10px"><span style="font-weight: 600; color: #3F3F46">มาตรา / ข้อที่อ้างอิง:</span> {{p.sections}}</div></sc-if>
+<div style="font-size: 12px; color: #71717A">ประเภทข้อมูลที่ตรวจ ({{p.nTypes}})</div>
+<div style="display: flex; flex-wrap: wrap; gap: 4px"><sc-for list="{{p.allChips}}" as="c"><span style="display: inline-flex; align-items: center; gap: 5px; border: 1px solid #EFEFEA; border-radius: 99px; padding: 1px 8px; font-size: 11.5px; color: #3F3F46"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 99px; background: {{c.color}}"></span>{{c.label}}</span></sc-for></div>
+</sc-if>
+<button type="button" aria-expanded="{{p.open}}" onClick="{{p.expand}}" style="align-self: flex-start; border: 0; background: none; padding: 2px 0; font-size: 12px; color: #3F3F46; text-decoration: underline; text-underline-offset: 2px; cursor: pointer">{{p.openLabel}}</button>
+</div>
+</sc-for>
+</div>
+<p style="margin: 12px 0 0; font-size: 11.5px; color: #898781">การอ้างอิงมาตราใช้เพื่อจัดหมวดหมู่และช่วยตัดสินใจเท่านั้น ไม่ใช่คำปรึกษาทางกฎหมาย ขอบเขตที่ต้องปิดบังจริงขึ้นกับวัตถุประสงค์และผู้รับเอกสาร ควรยืนยันกับฝ่ายกฎหมายหรือ DPO ขององค์กร</p>
+</section>
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
 <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
 <section class="card" aria-label="ผลลัพธ์เริ่มต้นหลังตรวจ" style="padding: 16px 18px">
 <h2 style="margin: 0; font-size: 15px; font-weight: 600">ผลลัพธ์เริ่มต้นหลังตรวจ</h2>
@@ -179,9 +217,10 @@
 <section class="card" aria-label="ประเภทข้อมูลส่วนบุคคล" style="flex: 999 1 560px; min-width: 0; overflow: hidden">
 <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; padding: 16px 20px; border-bottom: 1px solid #EFEFEA"><div><h2 style="margin: 0; font-size: 15px; font-weight: 600">ประเภทข้อมูลส่วนบุคคล</h2><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">เปิด {{typesOn}} จาก {{typesAll}} ประเภท · โหมดปิดบังของแต่ละประเภท</div></div><sc-if value="{{savedNote}}"><span role="status" style="font-size: 12.5px; color: #166534">{{savedNote}}</span></sc-if></div>
 <sc-for list="{{types}}" as="t">
+<sc-if value="{{t.head}}"><div style="padding: 12px 20px 6px; border-top: 1px solid #EFEFEA; background: #FAFAF8; font-size: 12px; font-weight: 600; color: #52525B">{{t.head}}</div></sc-if>
 <div class="row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 20px; border-top: {{t.sep}}">
-<button type="button" role="switch" aria-checked="{{t.on}}" aria-label="{{t.label}}" aria-disabled="{{t.locked}}" onClick="{{t.toggle}}" style="flex: none; width: 36px; height: 22px; border-radius: 99px; border: 0; padding: 0; cursor: {{t.cursor}}; position: relative; background: {{t.track}}"><span aria-hidden="true" style="position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 99px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.25); transform: {{t.knob}}"></span></button>
-<span style="flex: 1 1 200px; min-width: 0; display: flex; align-items: center; gap: 8px"><span aria-hidden="true" style="flex: none; width: 8px; height: 8px; border-radius: 99px; background: {{t.color}}"></span><span style="font-size: 13.5px; font-weight: 500; color: {{t.fg}}">{{t.label}}</span><span class="mono" style="font-size: 12px; color: #898781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.ex}}</span></span>
+<button type="button" role="switch" aria-checked="{{t.on}}" aria-label="{{t.label}}" aria-disabled="{{t.dis}}" onClick="{{t.toggle}}" style="flex: none; width: 36px; height: 22px; border-radius: 99px; border: 0; padding: 0; cursor: {{t.cursor}}; position: relative; background: {{t.track}}"><span aria-hidden="true" style="position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 99px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.25); transform: {{t.knob}}"></span></button>
+<span style="flex: 1 1 200px; min-width: 0"><span style="display: flex; align-items: center; gap: 8px; min-width: 0"><span aria-hidden="true" style="flex: none; width: 8px; height: 8px; border-radius: 99px; background: {{t.color}}"></span><span style="font-size: 13.5px; font-weight: 500; color: {{t.fg}}">{{t.label}}</span><span class="mono" style="font-size: 12px; color: #898781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.ex}}</span></span><span style="display: block; margin: 2px 0 0 16px; font-size: 11.5px; color: {{t.lawFg}}">{{t.law}}</span></span>
 <span style="font-size: 12px; color: #71717A; white-space: nowrap">{{t.src}}</span>
 <sc-if value="{{t.unlocked}}"><select class="sel" aria-label="โหมดปิดบัง {{t.label}}" onChange="{{t.setMode}}" style="flex: none; width: 150px; font-size: 12.5px; color: {{t.selFg}}"><sc-for list="{{t.opts}}" as="o"><option value="{{o.v}}" {{{o.sel}}}>{{o.label}}</option></sc-for></select></sc-if>
 <sc-if value="{{t.locked}}"><span style="flex: none; width: 150px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: space-between; border: 1px solid #F1F1EE; background: #F7F7F4; border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: #71717A">ลบทิ้งเสมอ<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></span></sc-if>

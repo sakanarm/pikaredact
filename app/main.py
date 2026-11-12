@@ -28,6 +28,7 @@ from .detect.llm import Profile, get_profile, list_models, test_connection
 from .docio import SUPPORTED, find_leaks, open_document
 from .engine import LAYER_LABELS, analyzer, detect, layer_of, models_of, primary_layer
 from .models import ENTITY_TYPES, MODES, Finding
+from .packs import DEFAULT_PACKS, clean_pack_ids, effective_types, law_map, public_packs
 from .redact.operators import REMOVED, findings_csv, mask_value, plan_redaction
 
 VAR = config.ROOT / "var"
@@ -86,6 +87,7 @@ DEFAULT_SETTINGS = {
     "default_connector": "",      # connector name or "none"
     "layers": {"ner": True, "list": True},
     "type_modes": {},             # entity type -> mode; missing = follow the mode picked in review
+    "packs_on": DEFAULT_PACKS,     # rule packs (law / standard) switched on; locked packs are always on
     "types_off": ["DATE_OF_BIRTH"],
     "default_output": "ask",      # ask | redact | highlight
 }
@@ -106,6 +108,7 @@ def load_settings() -> dict:
         s.update(saved)
     except (OSError, ValueError):
         pass
+    s["packs_on"] = clean_pack_ids(s.get("packs_on"))
     return s
 
 
@@ -182,7 +185,14 @@ def api_config():
         "profiles": _profiles_public(), "default_profile": config.default_llm_profile(),
         "settings": load_settings(), "ttl_minutes": config.JOB_TTL_SECONDS // 60,
         "lists": {k: v[1] for k, v in gazetteer.LIST_FILES.items()},
+        "packs": public_packs(), "law": law_map(),
+        "active_types": _active_types(),
     }
+
+
+def _active_types(s: dict | None = None) -> list[str]:
+    s = s or load_settings()
+    return effective_types(s["packs_on"], s.get("types_off"))
 
 
 @app.get("/api/settings")
@@ -219,10 +229,12 @@ async def put_settings(request: Request):
         s["type_modes"] = {k: v for k, v in body["type_modes"].items() if k in ENTITY_TYPES and k != "SECRET" and v in MODES}
     if isinstance(body.get("types_off"), list):
         s["types_off"] = [t for t in body["types_off"] if t in ENTITY_TYPES and t != "SECRET"]
+    if isinstance(body.get("packs_on"), list):
+        s["packs_on"] = clean_pack_ids(body["packs_on"])
     if body.get("default_output") in ("ask", "redact", "highlight"):
         s["default_output"] = body["default_output"]
     SETTINGS_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
-    return s
+    return {**s, "active_types": _active_types(s)}
 
 
 def _profile_or_404(name: str, model: str | None = None) -> Profile:
@@ -329,8 +341,9 @@ async def create_job(file: UploadFile | None = File(None), text: str = Form(""),
         raise HTTPException(400, f"เปิดไฟล์ไม่ได้ ({type(e).__name__}) — ไฟล์อาจเสียหรือมีรหัสผ่าน")
     s = load_settings()
     merged = {k: opts.get(k, s[k]) for k in ("profiles", "combine", "min_agree", "use_llm", "layers", "sanitize")}
-    off = set(s.get("types_off") or [])
-    merged["entities"] = [t for t in ENTITY_TYPES if t not in off]
+    packs = clean_pack_ids(opts["packs"]) if isinstance(opts.get("packs"), list) else s["packs_on"]
+    merged["entities"] = effective_types(packs, s.get("types_off"))
+    merged["packs"] = packs
     job = Job(uuid.uuid4().hex, name, doc, options=merged)
     with _lock:
         JOBS[job.id] = job
@@ -352,7 +365,7 @@ def get_job(job_id: str):
     out = {"id": j.id, "filename": j.filename, "status": j.status, "stage": j.stage, "done": j.done, "total": j.total,
            "error": j.error, "kind": j.doc.kind, "ext": j.doc.ext, "highlight_ext": getattr(j.doc, "highlight_ext", j.doc.ext),
            "created": j.created, "expires": j.created + config.JOB_TTL_SECONDS, "options": {
-               k: j.options.get(k) for k in ("use_llm", "profiles", "combine", "layers", "sanitize")}}
+               k: j.options.get(k) for k in ("use_llm", "profiles", "combine", "layers", "sanitize", "packs", "entities")}}
     if j.status == "done":
         r = j.result
         out.update({

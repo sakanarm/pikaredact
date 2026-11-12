@@ -20,9 +20,10 @@ from .detect.gazetteer import GazetteerRecognizer, allowlist, norm_key
 from .detect.llm import Profile, llm_findings
 from .detect.names import TitleNameRecognizer
 from .detect.rules import build_rule_recognizers
+from .detect.sensitive import build_sensitive_recognizers
 from .detect.tables import table_findings
 from .detect.thai_nlp import ThaiNlpEngine, tokenize
-from .models import ENTITY_TYPES, TYPE_PRIORITY, Finding, Segment
+from .models import ENTITY_TYPES, SENSITIVE_TYPES, TYPE_PRIORITY, Finding, Segment
 from .normalize import normalize
 
 SEP = "\n§\n"
@@ -61,7 +62,7 @@ def primary_layer(f: Finding) -> str:
 @lru_cache(maxsize=1)
 def analyzer() -> AnalyzerEngine:
     registry = RecognizerRegistry(supported_languages=["th"])
-    for rec in build_rule_recognizers():
+    for rec in build_rule_recognizers() + build_sensitive_recognizers():
         registry.add_recognizer(rec)
     registry.add_recognizer(TitleNameRecognizer())
     registry.add_recognizer(GazetteerRecognizer())
@@ -128,10 +129,15 @@ class _Bounds:
         return s in b and e in b
 
 
+# Values that describe a person rather than identify them ("เบาหวาน", "35,000 บาท"): the same word elsewhere
+# in the document is usually generic text, so it is not copied to every other occurrence.
+NO_PROPAGATE = SENSITIVE_TYPES | {"SALARY", "CARD_SECURITY"}
+
+
 def _propagate(segs: list[Segment], norms: list[str], findings: list[Finding]) -> list[Finding]:
     best: dict[str, Finding] = {}
     for f in findings:
-        if f.score < config.AUTO_ACCEPT_SCORE:
+        if f.score < config.AUTO_ACCEPT_SCORE or f.entity_type in NO_PROPAGATE:
             continue
         val = re.sub(r"\s+", " ", normalize(f.text)).strip()
         if len(val) < 4 or (val.replace("-", "").replace(" ", "").isdigit() and len(val) < 6):
@@ -345,13 +351,15 @@ def detect(
 
     prog("merge")
     t3 = time.perf_counter()
+    allowed = None if entities is None else set(entities) | {"SECRET"}
+    if allowed is not None:  # before merge, so a switched-off type cannot take a span from an enabled one
+        found = [f for f in found if f.entity_type in allowed]
     found = _allow_filter(seg_norm, found)
     first = merge(found, seg_text)
     found = _allow_filter(seg_norm, found + _propagate(segs, norms, first))
     final = merge(found, seg_text)
     final = [f for f in final if f.score >= config.MIN_SCORE]
-    if entities is not None:
-        allowed = set(entities) | {"SECRET"}
+    if allowed is not None:
         final = [f for f in final if f.entity_type in allowed]
     order = {s.id: i for i, s in enumerate(segs)}
     final.sort(key=lambda f: (order.get(f.seg_id, 0), f.start))
