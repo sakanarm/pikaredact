@@ -148,3 +148,17 @@ def test_fake_never_invents_sensitive_facts():
     assert fake.make("HEALTH", "เบาหวาน") == "[ข้อมูลสุขภาพ]"
     assert fake.make("RELIGION", "อิสลาม").startswith("[")
     assert fake.make("IP_ADDRESS", "2001:db8::1").startswith("2001:db8::")
+
+
+def test_table_number_columns_need_digits():
+    from app.detect.tables import table_findings
+    from app.models import Segment
+    rows = [("ช่องทาง", "Mobile"), ("โทรศัพท์", "081-234-5678"), ("Platform", "Web")]
+    segs = []
+    for r, (a, b) in enumerate(rows):
+        segs.append(Segment(f"a{r}", a, "", cell=("t1", r, 0)))
+        segs.append(Segment(f"b{r}", b, "", cell=("t1", r, 1)))
+    segs += [Segment("x0", "Phone", "", cell=("t2", 0, 0)), Segment("x1", "Admin", "", cell=("t2", 0, 1))]
+    found = {(f.seg_id, f.entity_type) for f in table_findings(segs)}
+    assert ("b1", "PHONE") in found
+    assert not any(sid == "x1" for sid, _ in found)

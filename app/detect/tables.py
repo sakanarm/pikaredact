@@ -81,6 +81,19 @@ def _value_ok(text: str) -> bool:
     return label_type(t) is None  # the value is another label, not data
 
 
+# number-like types: a "Phone" column holding "Admin" / "Yes" is not a phone number
+_NEED_DIGIT = {"TH_ID_CARD", "PHONE", "BANK_ACCOUNT", "DATE_OF_BIRTH", "PASSPORT", "CREDIT_CARD", "CARD_SECURITY",
+               "MEDICAL_RECORD", "INSURANCE_ID", "TH_LICENSE_PLATE", "IP_ADDRESS", "GPS_LOCATION", "SALARY"}
+
+
+def _shape_ok(etype: str, text: str) -> bool:
+    if etype in _NEED_DIGIT:
+        return bool(re.search(r"[0-9๐-๙]", text))
+    if etype == "EMAIL":
+        return "@" in text
+    return True
+
+
 def _looks_like_data(text: str) -> bool:
     t = text.strip()
     return bool(re.search(r"\d|@", t)) or (len(t.split()) >= 2 and label_type(t) is None)
@@ -110,7 +123,7 @@ def table_findings(segments: list[Segment]) -> list[Finding]:
 
     def flag(key, etype, score, how):
         for seg in cells.get(key, []):
-            if seg.id in seen or not _value_ok(seg.text):
+            if seg.id in seen or not _value_ok(seg.text) or not _shape_ok(etype, seg.text):
                 continue
             s = len(seg.text) - len(seg.text.lstrip())
             e = len(seg.text.rstrip())

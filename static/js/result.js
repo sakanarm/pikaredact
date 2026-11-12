@@ -273,9 +273,12 @@ function tokenRange(sum, t) {
   return a.length === 1 ? `[${t}_${a[0]}]` : `[${t}_${a[0]}…${a[a.length - 1]}]`;
 }
 
-function descOf(st, sum, i) {
+function descOf(st, sum, i, name) {
   const j = st.job;
   const hl = sum.action === "highlight";
+  if (/\.report\.html$/.test(name || "")) {
+    return "รายงานหลักฐานสำหรับ DPO · ชุดกฎหมายที่ใช้ จำนวนต่อประเภท และ SHA-256 ของไฟล์ ไม่มีค่าข้อมูล · เปิดแล้วพิมพ์เป็น PDF ได้";
+  }
   if (i > 0) {   // second file is always the findings report
     return hl ? "ประเภท ตำแหน่ง คะแนน แหล่งที่มา · ค่าแสดงแบบปิดบางส่วน" : "รายการที่ปิดบัง · ค่าแสดงแบบปิดบางส่วน ไม่มีค่าเต็ม";
   }
@@ -362,7 +365,7 @@ function vals() {
     const ext = PR.extLabel((f.name.match(/\.[^.]+$/) || [""])[0]);
     const primary = i === 0;
     return {
-      ext, color: PR.extColor(ext), name: f.name, desc: descOf(st, sum, i), size: PR.size(f.size), url: f.url,
+      ext, color: PR.extColor(ext), name: f.name, desc: descOf(st, sum, i, f.name), size: PR.size(f.size), url: f.url,
       sep: i ? "1px solid #F2F2EE" : "0",
       btnBg: primary ? "#18181B" : "#FFFFFF", btnFg: primary ? "#FFFFFF" : "#18181B", btnBorder: primary ? "0" : "1px solid #DCDCD6",
       mark: () => { PR.hist.put(id, { downloaded: true }); },

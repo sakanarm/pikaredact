@@ -95,6 +95,7 @@
 
 <div style="margin-top: 14px">
 <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px"><span style="font-weight: 500">ชุดกฎตามกฎหมาย / มาตรฐาน</span><a href="#/settings/rules" style="color: #2563EB; font-size: 12.5px">รายละเอียด</a></div>
+<select class="sel" aria-label="ชุดสำเร็จรูปตามประเภทองค์กร" onChange="{{pickPreset}}" style="margin-top: 8px; width: 100%; font-size: 13px"><sc-for list="{{presetOpts}}" as="o"><option value="{{o.v}}" {{{o.sel}}}>{{o.label}}</option></sc-for></select>
 <div role="group" aria-label="ชุดกฎสำหรับงานนี้" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px">
 <sc-for list="{{packs}}" as="p"><button type="button" role="checkbox" aria-checked="{{p.on}}" aria-disabled="{{p.locked}}" onClick="{{p.toggle}}" title="{{p.tip}}" style="display: inline-flex; align-items: center; gap: 5px; border: 1px solid {{p.border}}; background: {{p.bg}}; color: {{p.fg}}; border-radius: 99px; padding: 5px 11px; min-height: 32px; font-size: 12.5px; cursor: {{p.cursor}}"><sc-if value="{{p.locked}}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></sc-if>{{p.name}}</button></sc-for>
 </div>
@@ -149,25 +150,27 @@
 <span style="font-size: 12.5px; color: #71717A">หลังหมดเวลา เก็บไว้เฉพาะสถิติ ไม่เก็บเนื้อหาหรือค่าที่พบ</span>
 </div>
 <div style="overflow-x: auto">
-<table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 760px">
+<table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 900px">
 <thead>
 <tr style="text-align: left; color: #71717A; font-size: 12.5px">
 <th scope="col" style="font-weight: 500; padding: 10px 20px">ไฟล์</th>
 <th scope="col" style="font-weight: 500; padding: 10px 12px">ประเภทเอกสาร</th>
 <th scope="col" style="font-weight: 500; padding: 10px 12px; text-align: right">PII ที่พบ</th>
 <th scope="col" style="font-weight: 500; padding: 10px 12px">ผลลัพธ์</th>
+<th scope="col" style="font-weight: 500; padding: 10px 12px">ชุดกฎ</th>
 <th scope="col" style="font-weight: 500; padding: 10px 12px">สถานะ</th>
 <th scope="col" style="font-weight: 500; padding: 10px 20px; text-align: right">เมื่อ</th>
 </tr>
 </thead>
 <tbody>
-<sc-if value="{{noJobs}}"><tr><td colspan="6" style="padding: 22px 20px; color: #71717A; font-size: 13.5px; border-top: 1px solid #F2F2EE">ยังไม่มีงานในเบราว์เซอร์นี้ งานที่ตรวจจะแสดงที่นี่จนกว่าจะหมดเวลา</td></tr></sc-if>
+<sc-if value="{{noJobs}}"><tr><td colspan="7" style="padding: 22px 20px; color: #71717A; font-size: 13.5px; border-top: 1px solid #F2F2EE">ยังไม่มีงานในเบราว์เซอร์นี้ งานที่ตรวจจะแสดงที่นี่จนกว่าจะหมดเวลา</td></tr></sc-if>
 <sc-for list="{{jobs}}" as="j">
 <tr class="row {{j.cls}}" onClick="{{j.open}}" style="border-top: 1px solid #F2F2EE">
 <td style="padding: 12px 20px"><div style="display: flex; align-items: center; gap: 10px"><span class="mono" style="flex: none; width: 30px; height: 30px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 600; color: #FFFFFF; background: {{j.color}}">{{j.ext}}</span><sc-if value="{{j.live}}"><a href="{{j.href}}" style="font-weight: 500">{{j.name}}</a></sc-if><sc-if value="{{!j.live}}"><span style="font-weight: 500; color: #71717A">{{j.name}}</span></sc-if></div></td>
 <td style="padding: 12px; color: #3F3F46">{{j.kind}}</td>
 <td class="mono" style="padding: 12px; text-align: right; font-variant-numeric: tabular-nums">{{j.pii}}</td>
 <td style="padding: 12px; color: #3F3F46">{{j.mode}}</td>
+<td title="{{j.packsTip}}" style="padding: 12px; color: #3F3F46; font-size: 12.5px; max-width: 220px">{{j.packs}}</td>
 <td style="padding: 12px"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 4px 8px; border-radius: 6px; background: {{j.stBg}}; color: {{j.stFg}}"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 99px; background: {{j.stDot}}"></span>{{j.status}}</span></td>
 <td style="padding: 12px 20px; text-align: right; color: #71717A">{{j.when}}</td>
 </tr>

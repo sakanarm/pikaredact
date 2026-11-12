@@ -28,8 +28,9 @@ from .detect.llm import Profile, get_profile, list_models, test_connection
 from .docio import SUPPORTED, find_leaks, open_document
 from .engine import LAYER_LABELS, analyzer, detect, layer_of, models_of, primary_layer
 from .models import ENTITY_TYPES, MODES, Finding
-from .packs import DEFAULT_PACKS, clean_pack_ids, effective_types, law_map, public_packs
+from .packs import DEFAULT_PACKS, PRESETS, clean_pack_ids, effective_types, law_map, public_packs
 from .redact.operators import REMOVED, findings_csv, mask_value, plan_redaction
+from .report import build_report
 
 VAR = config.ROOT / "var"
 VAR.mkdir(exist_ok=True)
@@ -185,7 +186,7 @@ def api_config():
         "profiles": _profiles_public(), "default_profile": config.default_llm_profile(),
         "settings": load_settings(), "ttl_minutes": config.JOB_TTL_SECONDS // 60,
         "lists": {k: v[1] for k, v in gazetteer.LIST_FILES.items()},
-        "packs": public_packs(), "law": law_map(),
+        "packs": public_packs(), "law": law_map(), "presets": PRESETS,
         "active_types": _active_types(),
     }
 
@@ -482,11 +483,21 @@ async def export(job_id: str, request: Request):
             replaced = plan.replaced
     except Exception as e:
         raise HTTPException(500, f"สร้างไฟล์ไม่สำเร็จ ({type(e).__name__})")
-    seconds = time.perf_counter() - t0
-
     system = j.result.findings
     chosen_ids = {f.id for f in chosen}
     rejected = [f for f in system if f.id not in chosen_ids]
+    stem_changed = stem == "document" and os.path.splitext(j.filename)[0] != "document"
+    try:   # evidence report: counts, types, legal basis and file hashes only
+        files[f"{stem}.{'highlight' if action == 'highlight' else 'redacted'}.report.html"] = (build_report(
+            job_id=j.id, stem=stem, ext=j.doc.ext, created=j.created, action=action, mode=mode,
+            type_modes=body.get("type_modes") or {}, sanitize=sanitize, options=j.options, models=j.result.models,
+            system=system, chosen=chosen, leaks=len(leaks), outputs={n: d for n, (d, _) in files.items()},
+            warnings=[info["warning"]] if info.get("warning") else [], has_mapping=bool(mapping),
+            stem_changed=stem_changed), "text/html; charset=utf-8")
+        report_err = ""
+    except Exception as e:  # the report is extra: never fail the export over it
+        report_err = f"สร้างรายงานหลักฐานไม่สำเร็จ ({type(e).__name__})"
+    seconds = time.perf_counter() - t0
     _record(kind="export", ext=j.doc.ext, seconds=seconds, findings=len(chosen), by_type=counts, action=action, mode=mode,
             leaks=len(leaks), by_layer=dict(Counter(primary_layer(f) for f in chosen)),
             models=[m["model"] for m in j.result.models],
@@ -497,6 +508,8 @@ async def export(job_id: str, request: Request):
                    "accepted_by_layer": dict(Counter(primary_layer(f) for f in system if f.id in chosen_ids))})
 
     warn = [info["warning"]] if info.get("warning") else []
+    if report_err:
+        warn.append(report_err)
     if info.get("missed"):
         warn.append(f"มี {info['missed']} รายการที่วางในไฟล์ไม่ได้ — ตรวจไฟล์ผลลัพธ์ก่อนส่งต่อ")
     if info.get("not_highlighted"):
@@ -511,7 +524,7 @@ async def export(job_id: str, request: Request):
         "leaks": [{"type": l["type"], "masked": mask_value(l["type"], l["value"]), "where": l["where"]} for l in leaks],
         "warnings": warn + list(getattr(j.doc, "warnings", [])),
         "checks": {"values": len({(f.entity_type, f.text) for f in chosen}), "leaks": len(leaks),
-                   "stem_changed": stem == "document" and os.path.splitext(j.filename)[0] != "document",
+                   "stem_changed": stem_changed,
                    "sanitize": sanitize, "secrets": counts.get("SECRET", 0) if action == "redact" else
                    sum(1 for f in chosen if f.entity_type == "SECRET")},
         "replaced": replaced, "has_mapping": bool(mapping),

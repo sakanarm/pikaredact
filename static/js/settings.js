@@ -451,8 +451,16 @@ function ruleVals() {
       },
     };
   });
-  const packsAll = () => setPacks(packList.map((p) => p.id));
-  const packsDefault = () => setPacks(packList.filter((p) => p.default).map((p) => p.id));
+  const cur = PR.presetOf([...packsOn]);
+  const presets = (C.presets || []).map((r) => {
+    const on = !!cur && cur.id === r.id;
+    return {
+      name: r.name, desc: r.desc, on: String(on),
+      border: on ? "#18181B" : "#DCDCD6", bg: on ? "#18181B" : "#FFFFFF", fg: on ? "#FFFFFF" : "#3F3F46",
+      pick: () => { if (on) return false; setPacks(r.packs); },
+    };
+  });
+  const presetNote = cur ? cur.desc : "กำหนดเอง · ชุดกฎที่เปิดไม่ตรงกับชุดสำเร็จรูปใด";
 
   const off = new Set(st.types_off || []);
   const tm = st.type_modes || {};
@@ -500,7 +508,7 @@ function ruleVals() {
   return {
     outDefaults, modeOpts, setMode: (ev) => { st.mode = ev.target.value; putRule({ mode: ev.target.value }); },
     thGrad, thMarks, thRows, types, typesOn: String(typesOn), typesAll: String(order.length), savedNote: S.savedNote,
-    packs, packsOnN: String(packsOnN), packsAllN: String(packList.length), packsAll, packsDefault,
+    packs, packsOnN: String(packsOnN), packsAllN: String(packList.length), presets, presetNote,
   };
 }
 

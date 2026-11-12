@@ -152,14 +152,46 @@ def effective_types(packs_on, types_off) -> list[str]:
     return [t for t in pack_types(packs_on) if t not in off]
 
 
-def law_map() -> dict[str, list[str]]:
-    """type -> short citations of every pack that covers it (enabled or not)."""
+def law_map(pack_ids=None) -> dict[str, list[str]]:
+    """type -> short citations of the packs that cover it: every pack, or only the given ones."""
+    use = None if pack_ids is None else set(clean_pack_ids(pack_ids))
     out: dict[str, list[str]] = {t: [] for t in ENTITY_TYPES}
     for p in PACKS:
-        for t in p["types"]:
-            out[t].append(p["short"])
+        if use is None or p["id"] in use:
+            for t in p["types"]:
+                out[t].append(p["short"])
     return out
+
+
+def get_pack(pid: str) -> dict | None:
+    return _BY_ID.get(pid)
 
 
 def public_packs() -> list[dict]:
     return [dict(p, types=list(p["types"])) for p in PACKS]
+
+
+# ---------------------------------------------------------------- presets: one click picks the packs for a kind of organisation
+PRESETS = [
+    {"id": "default", "name": "ค่าแนะนำ", "desc": "องค์กรทั่วไปในไทย: PDPA ครบทั้งทั่วไปและอ่อนไหว สุขภาพ บัตรชำระเงิน การเงิน และข้อมูลองค์กร",
+     "packs": DEFAULT_PACKS},
+    {"id": "hospital", "name": "โรงพยาบาล / สุขภาพ", "desc": "เวชระเบียนและข้อมูลผู้ป่วย: PDPA ข้อมูลอ่อนไหว พ.ร.บ.สุขภาพแห่งชาติ และบัตรชำระเงิน",
+     "packs": ["pdpa_general", "pdpa_sensitive", "th_health", "th_cyber", "pci_dss", "internal"]},
+    {"id": "research", "name": "งานวิจัย / เปิดเผยข้อมูลสุขภาพ", "desc": "ทำข้อมูลนิรนามก่อนส่งต่อหรือเผยแพร่ เพิ่ม HIPAA Safe Harbor ที่ตัดวันที่ URL และตัวระบุ 18 ประเภท",
+     "packs": ["pdpa_general", "pdpa_sensitive", "th_health", "th_cyber", "hipaa", "internal"]},
+    {"id": "finance", "name": "ธนาคาร / การเงิน / ประกัน", "desc": "ความลับลูกค้า ข้อมูลเครดิต เลขบัตรและ CVV ตาม PCI DSS",
+     "packs": ["pdpa_general", "pdpa_sensitive", "th_cyber", "pci_dss", "th_finance", "internal"]},
+    {"id": "government", "name": "หน่วยงานรัฐ", "desc": "PDPA ร่วมกับ พ.ร.บ.ข้อมูลข่าวสารของราชการ (ข้อมูลข่าวสารส่วนบุคคล)",
+     "packs": ["pdpa_general", "pdpa_sensitive", "th_health", "th_cyber", "th_gov_info", "internal"]},
+    {"id": "global", "name": "บริษัทข้ามชาติ / ลูกค้าต่างประเทศ", "desc": "PDPA ร่วมกับ GDPR และ ISO/IEC 27701 สำหรับข้อมูลที่ข้ามพรมแดน",
+     "packs": ["pdpa_general", "pdpa_sensitive", "th_health", "th_cyber", "pci_dss", "th_finance", "gdpr", "iso_privacy", "internal"]},
+    {"id": "all", "name": "ครบทุกชุด", "desc": "เปิดทุกกฎหมายและมาตรฐาน จับได้มากที่สุด", "packs": PACK_IDS},
+]
+for _p in PRESETS:
+    _p["packs"] = clean_pack_ids(_p["packs"])
+
+
+def preset_of(pack_ids) -> str:
+    """Id of the preset whose packs match exactly, else ""."""
+    want = clean_pack_ids(pack_ids)
+    return next((p["id"] for p in PRESETS if p["packs"] == want), "")

@@ -157,7 +157,15 @@ PR.hist = {
 };
 
 /* ---------------------------------------------------------------- formatting */
-const EXT_COLORS = { DOCX: "#2563EB", XLSX: "#15803D", PPTX: "#C2410C", PDF: "#B91C1C", CSV: "#15803D" };
+/* rule-pack preset whose packs match exactly (locked packs count as on), or null */
+PR.presetOf = (ids) => {
+  const packs = (PR.cfg && PR.cfg.packs) || [];
+  const norm = (a) => packs.filter((p) => p.locked || a.includes(p.id)).map((p) => p.id).join(",");
+  const want = norm(ids || []);
+  return ((PR.cfg && PR.cfg.presets) || []).find((r) => norm(r.packs) === want) || null;
+};
+
+const EXT_COLORS = { DOCX: "#2563EB", XLSX: "#15803D", PPTX: "#C2410C", PDF: "#B91C1C", CSV: "#15803D", HTML: "#4338CA" };
 PR.extColor = (ext) => EXT_COLORS[String(ext || "").replace(".", "").toUpperCase()] || "#52525B";
 PR.extLabel = (ext) => String(ext || "").replace(".", "").toUpperCase().slice(0, 4) || "TXT";
 const KIND = { docx: "เอกสาร Word", xlsx: "Excel", pptx: "PowerPoint", pdf: "PDF", text: "ข้อความ", csv: "CSV" };

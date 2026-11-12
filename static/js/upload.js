@@ -102,7 +102,8 @@ async function start() {
       const now = Date.now() / 1000;
       ids.push(r.id);
       it.sent = true;
-      PR.hist.put(r.id, { name: it.name, ext: it.ext, kind: kindOf(it.ext), pii: null, mode: "", created: now, expires: now + ttl });
+      PR.hist.put(r.id, { name: it.name, ext: it.ext, kind: kindOf(it.ext), pii: null, mode: "", created: now, expires: now + ttl,
+        packs: [...opts.packs] });
     } catch (e) {
       it.err = e.message.length > 40 ? "เปิดไฟล์ไม่ได้" : e.message;
       S.error = `${it.name}: ${e.message}`;
@@ -189,16 +190,37 @@ function vals() {
     };
   });
   const nTypes = packTypes().length;
+  const cur = PR.presetOf(S.packs);
+  const presetOpts = [
+    ...(cur ? [] : [{ v: "", label: "กำหนดเอง", sel: "selected" }]),
+    ...(cfg.presets || []).map((r) => ({ v: r.id, label: `ชุดสำเร็จรูป: ${r.name}`, sel: cur && cur.id === r.id ? "selected" : "" })),
+  ];
+  const pickPreset = (ev) => {
+    const r = (cfg.presets || []).find((x) => x.id === ev.target.value);
+    if (r) S.packs = [...r.packs];
+  };
   const san = sw(S.sanitize);
   const valid = S.files.filter((f) => !f.err).length;
   const ai = useAI();
   const picked = chosenProfiles();
   const now = Date.now() / 1000;
+  const packName = Object.fromEntries((cfg.packs || []).map((p) => [p.id, p.name]));
+  const packsOf = (ids) => {   // preset name, or the packs that were on (locked ones are implied)
+    if (!Array.isArray(ids)) return { label: "–", tip: "" };
+    const on = (cfg.packs || []).filter((p) => p.locked || ids.includes(p.id));
+    const tip = on.map((p) => packName[p.id]).join(" · ");
+    const r = PR.presetOf(ids);
+    if (r) return { label: r.name, tip };
+    const named = on.filter((p) => !p.locked).map((p) => p.short);
+    return { label: named.length > 2 ? `${named.slice(0, 2).join(" · ")} +${named.length - 2}` : named.join(" · ") || "เฉพาะชุดที่เปิดเสมอ", tip };
+  };
   const jobs = PR.hist.all().map((h) => {
     const state = PR.hist.state(h);
     const st = ST[state];
     const live = state !== "gone";
+    const pk = packsOf(h.packs);
     return {
+      packs: pk.label, packsTip: pk.tip,
       color: PR.extColor(h.ext), ext: PR.extLabel(h.ext), name: h.name, kind: PR.kindLabel(h.kind),
       pii: h.pii == null ? "–" : PR.num(h.pii), mode: h.mode || "–",
       status: state === "gone" ? "หมดเวลา · ลบไฟล์แล้ว" : h.downloaded ? "ดาวน์โหลดแล้ว" : h.exported ? "สร้างไฟล์แล้ว" : "รอตรวจ",
@@ -221,7 +243,7 @@ function vals() {
     accept: cfg.supported.join(","), maxMb: cfg.max_upload_mb,
     files, pasteText: S.text, pasteCount: PR.num(S.text.length),
     onPaste: (ev) => { S.text = ev.target.value; S.error = ""; },
-    layers, packs, packNote: `ตรวจ ${nTypes} ประเภทข้อมูล · เปลี่ยนเฉพาะงานนี้ ค่าเริ่มต้นตั้งที่หน้าการตรวจจับ`, aiOn: S.ai, noProfiles: !(cfg.profiles || []).length, profiles,
+    layers, packs, presetOpts, pickPreset, packNote: `ตรวจ ${nTypes} ประเภทข้อมูล · เปลี่ยนเฉพาะงานนี้ ค่าเริ่มต้นตั้งที่หน้าการตรวจจับ`, aiOn: S.ai, noProfiles: !(cfg.profiles || []).length, profiles,
     multi: S.ai && nPicked > 1, combines,
     combineNote: S.combine === "vote" ? "กดอีกครั้งเพื่อเปลี่ยนจำนวน · มีผลกับผลจาก AI เท่านั้น" : "จับได้มากที่สุด",
     sanitize: String(S.sanitize), sanTrack: san.track, sanKnob: san.knob, toggleSanitize: () => { S.sanitize = !S.sanitize; },

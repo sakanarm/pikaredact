@@ -153,9 +153,14 @@
 <div style="margin-top: 2px; font-size: 12.5px; color: #71717A">เปิด {{packsOnN}} จาก {{packsAllN}} ชุด · ตรวจ {{typesOn}} ประเภทข้อมูล · ประเภทที่ชุดกฎหลายชุดครอบคลุมจะตรวจครั้งเดียว</div></div>
 <div style="display: flex; gap: 8px; flex-wrap: wrap">
 <sc-if value="{{savedNote}}"><span role="status" style="align-self: center; font-size: 12.5px; color: #166534">{{savedNote}}</span></sc-if>
-<button type="button" onClick="{{packsDefault}}" style="border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 9px; padding: 6px 12px; min-height: 34px; font-size: 12.5px; cursor: pointer">ค่าแนะนำ</button>
-<button type="button" onClick="{{packsAll}}" style="border: 1px solid #DCDCD6; background: #FFFFFF; border-radius: 9px; padding: 6px 12px; min-height: 34px; font-size: 12.5px; cursor: pointer">เปิดทุกชุด</button>
 </div>
+</div>
+<div style="margin-top: 12px; border: 1px solid #EFEFEA; background: #FBFBF9; border-radius: 12px; padding: 10px 12px">
+<div style="font-size: 12.5px; font-weight: 500; color: #3F3F46">ชุดสำเร็จรูปตามประเภทองค์กร</div>
+<div role="group" aria-label="ชุดสำเร็จรูปตามประเภทองค์กร" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{presets}}" as="r"><button type="button" aria-pressed="{{r.on}}" onClick="{{r.pick}}" title="{{r.desc}}" style="border: 1px solid {{r.border}}; background: {{r.bg}}; color: {{r.fg}}; border-radius: 99px; padding: 4px 12px; min-height: 32px; font-size: 12.5px; cursor: pointer">{{r.name}}</button></sc-for>
+</div>
+<div style="margin-top: 6px; font-size: 12px; color: #71717A">{{presetNote}}</div>
 </div>
 <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; align-items: start">
 <sc-for list="{{packs}}" as="p">
