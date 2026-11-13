@@ -30,7 +30,10 @@ DOTTED_RE = re.compile(r"(?<![ก-๎A-Za-z.])(?:" + "|".join(map(re.escape, _DO
 EN_TITLE_RE = re.compile(r"(?<![A-Za-z])(?:(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s+|K\.\s?|Khun\s+)(?=[A-Z])")
 
 # Words that look like a surname slot but are not ("คุณสมชาย ทีมพัฒนา").
-_NOT_SURNAME = {"ทีม", "ฝ่าย", "แผนก", "ผู้จัดการ", "หัวหน้า", "ตำแหน่ง", "โทร", "เบอร์", "อีเมล", "และ", "หรือ"}
+_NOT_SURNAME = {"ทีม", "ฝ่าย", "แผนก", "ผู้จัดการ", "หัวหน้า", "ตำแหน่ง", "โทร", "เบอร์", "อีเมล", "และ", "หรือ",
+                "เรื่อง", "วันที่", "วัน", "เวลา", "ผู้", "เลขที่", "รหัส", "บริษัท", "โครงการ", "สถานที่", "จาก", "ถึง",
+                "ตามที่", "ลงวันที่", "เมื่อ", "ประจำ", "สังกัด", "กลุ่ม", "สำนัก", "กอง", "ส่วน", "งาน", "ลงชื่อ", "เรียน",
+                "สำเนา", "อายุ", "เพศ", "สัญชาติ", "ที่อยู่", "บ้านเลขที่"}
 
 
 def _is_th(ch: str) -> bool:
@@ -47,6 +50,25 @@ def _take_tokens(run: str, max_len: int) -> str:
     return out
 
 
+def _name_part(run: str, corpus: set, max_len: int) -> str:
+    """The name at the start of a Thai run with no space after it ("สมชายเดินทางไป...").
+    A whole run in the corpus is kept. Else the longest corpus prefix, when the rest starts with an
+    ordinary word or stopword. Else leading tokens up to a stopword."""
+    if run in corpus:
+        return run
+    toks = word_tokenize(run, engine="newmm", keep_whitespace=False)
+    # longest corpus prefix, by character ("ใจดี|มาก" is tokenized "ใจ|ดีมาก")
+    best = next((run[:n] for n in range(min(len(run) - 1, max_len), 1, -1) if run[:n] in corpus), "")
+    if best:
+        rest = word_tokenize(run[len(best):], engine="newmm", keep_whitespace=False)
+        # cut only when clearly followed by other words; a lone tail may be part of the name ("ศรีสวัสดิ์|วงศา")
+        if rest and (rest[0] in thai_stopwords() or (len(rest) >= 2 and len(rest[0]) >= 3 and rest[0] in thai_words())):
+            return best
+    if len(run) <= max_len and not any(t in thai_stopwords() for t in toks[1:]):
+        return run
+    return _take_tokens(run, max_len)
+
+
 def _thai_name_at(text: str, p: int, soft: bool) -> Optional[tuple[int, int, float]]:
     m = TH_RUN.match(text, p)
     if not m:
@@ -55,7 +77,7 @@ def _thai_name_at(text: str, p: int, soft: bool) -> Optional[tuple[int, int, flo
     first_tok = word_tokenize(run1, engine="newmm", keep_whitespace=False)[0]
     if first_tok in thai_stopwords():
         return None
-    name1 = run1 if len(run1) <= 15 else _take_tokens(run1, 12)
+    name1 = _name_part(run1, thai_first_names(), 15)
     if not name1:
         return None
     known = name1 in thai_first_names() or first_tok in thai_first_names()
@@ -65,9 +87,13 @@ def _thai_name_at(text: str, p: int, soft: bool) -> Optional[tuple[int, int, flo
     if name1 == run1 and text[end:end + 1] == " " and end + 1 < len(text) and _is_th(text[end + 1]):
         run2 = TH_RUN.match(text, end + 1).group()
         toks2 = word_tokenize(run2, engine="newmm", keep_whitespace=False)
-        if toks2 and toks2[0] not in thai_stopwords() and toks2[0] not in _NOT_SURNAME:
-            surname = run2 if len(run2) <= 20 else _take_tokens(run2, 20)
-            if len(surname) >= 2:
+        lead = ""
+        if (len(toks2) > 1 and toks2[0] in thai_stopwords() and toks2[1] not in thai_stopwords()
+                and toks2[0] + toks2[1] not in thai_words()):
+            lead = toks2[0]  # "คง|สวัสดิ์": a surname whose first syllable is also a stopword
+        if toks2 and (lead or toks2[0] not in thai_stopwords()) and toks2[0] not in _NOT_SURNAME and run2 not in _NOT_SURNAME:
+            surname = lead + _name_part(run2[len(lead):], thai_family_names(), 20 - len(lead))
+            if len(surname) >= 2 and len(surname) > len(lead):
                 end = end + 1 + len(surname)
                 has_surname = True
     if soft:
@@ -151,9 +177,11 @@ class TitleNameRecognizer(EntityRecognizer):
                 continue  # "สมชาย เลขบัตรประชาชน": the next run is ordinary words, not a surname
             if run1 in words and not in_family:
                 continue  # "น้ำ ประปา": the first run is also an ordinary word -> need a known surname
+            if run2 in words and not in_family:
+                continue  # "ทองดี วันที่": a plain word is not a surname without the surname corpus
             if in_family:
                 score = 0.8
-            elif run2 not in words and len(run2) >= 3:
+            elif len(run2) >= 3:
                 score = 0.6
             else:
                 score = 0.45
