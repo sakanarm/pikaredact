@@ -264,7 +264,12 @@ def test_keycloak_flow(env, monkeypatch):
         monkeypatch.setattr(auth.httpx, "post", lambda *a, **k: _Resp({"id_token": _jwt(claims)}))
         return c.get(f"/auth/callback?code=abc&state={q['state'][0]}")
 
-    r = start({"preferred_username": "chief@example.com", "name": "Chief"})
+    # an email the person typed themselves (unverified), or only a username, is not trusted
+    assert start({"email": "chief@example.com"}).headers["location"].endswith("/login?e=unverified")
+    assert start({"preferred_username": "chief@example.com"}).headers["location"].endswith("/login?e=no_email")
+    assert start({"email": "chief@example.com", "email_verified": True, "azp": "other"}
+                 ).headers["location"].endswith("/login?e=bad_token")
+    r = start({"email": "chief@example.com", "email_verified": True, "name": "Chief"})
     assert r.headers["location"].endswith("/app#/analytics")
     assert c.get("/api/me").json()["role"] == "admin"   # from PIKA_ADMIN_EMAILS, case-insensitive
     # a Microsoft-only account has no password of its own to change here
@@ -273,8 +278,14 @@ def test_keycloak_flow(env, monkeypatch):
     loc = urlparse(r.headers["location"])
     assert loc.path.endswith("/logout") and "id_token_hint" in parse_qs(loc.query)
 
-    r = start({"email": "Someone@Example.com"})
+    r = start({"email": "Someone@Example.com", "email_verified": True})
     assert r.headers["location"].endswith("/login?e=pending")
+
+    # KEYCLOAK_SHOW_BUTTON=0: no button on the login page, but the door still opens
+    monkeypatch.setenv("KEYCLOAK_SHOW_BUTTON", "0")
+    assert c.get("/auth/status").json()["methods"] == {"password": True, "keycloak": False}
+    assert c.get("/auth/login").headers["location"].startswith(iss + "/auth?")
+    monkeypatch.delenv("KEYCLOAK_SHOW_BUTTON")
     assert c.get("/api/config").status_code == 403
 
     # replayed / unknown state

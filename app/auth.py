@@ -72,8 +72,14 @@ def password_enabled() -> bool:
     return mode() == "on" and os.environ.get("AUTH_PASSWORD_LOGIN", "1").strip() != "0"
 
 
+def keycloak_button() -> bool:
+    """KEYCLOAK_SHOW_BUTTON=0 hides the button on the login page while <base>/auth/login still works,
+    so Keycloak can be tried on prod before everyone sees it."""
+    return keycloak_enabled() and os.environ.get("KEYCLOAK_SHOW_BUTTON", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
 def methods() -> dict:
-    return {"password": password_enabled(), "keycloak": keycloak_enabled()}
+    return {"password": password_enabled(), "keycloak": keycloak_button()}
 
 
 def admin_emails() -> set[str]:
@@ -460,13 +466,18 @@ def finish_login(code: str, state: str, redirect_uri: str) -> tuple[User, str, s
     auds = aud if isinstance(aud, list) else [aud]
     if (c.get("iss") or "").rstrip("/") != (d.get("issuer") or issuer()).rstrip("/") or client_id() not in auds:
         raise LoginError("bad_token")
-    if len(auds) > 1 and c.get("azp") not in (None, client_id()):
+    # azp must be us when present, and present when there are several audiences (OIDC Core 3.1.3.7)
+    if c.get("azp") not in (None, client_id()) or (len(auds) > 1 and c.get("azp") is None):
         raise LoginError("bad_token")
     if float(c.get("exp") or 0) < time.time() - 60 or c.get("nonce") != row["nonce"]:
         raise LoginError("bad_token")
-    email = (c.get("email") or c.get("preferred_username") or "").strip().lower()
+    # Only an email Keycloak has verified. People can edit their own email (and username) on the
+    # Keycloak account page, so trusting an unverified one would let anyone claim an admin's address.
+    email = (c.get("email") or "").strip().lower()
     if not EMAIL_RE.match(email):
         raise LoginError("no_email")
+    if c.get("email_verified") is not True:
+        raise LoginError("unverified")
     name = c.get("name") or " ".join(x for x in (c.get("given_name"), c.get("family_name")) if x) or ""
     return signed_in(email, str(name)), id_token, row["next"]
 
