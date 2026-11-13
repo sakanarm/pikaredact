@@ -92,6 +92,20 @@ def test_chain_follows_value_wrapped_to_next_line():
 
 
 @needs_font
+def test_chain_follows_line_break_inside_a_thai_word():
+    # Thai lines break inside a piece: "อำเภอ" ends line 1, "เมืองนนทบุรี" starts line 2
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_font(fontname="th", fontfile=config.PDF_THAI_FONT)
+    page.insert_text((300, 120), "ตำบลบางกระสออำเภอ", fontname="th", fontsize=14)
+    page.insert_text((72, 142), "เมืองนนทบุรีจังหวัดนนทบุรี", fontname="th", fontsize=14)
+    boxes = pages.locate(doc.tobytes(), [("ตำบลบางกระสอ อำเภอเมืองนนทบุรี จังหวัดนนทบุรี", ["a1"])])
+    assert len(boxes) == 2 and all(b[5] == ["a1"] for b in boxes)
+    first, second = sorted(boxes, key=lambda b: b[2])
+    assert first[1] > 290 and second[1] < 80
+
+
+@needs_font
 def test_page_sizes_and_png():
     pdf = _html_pdf("<p>หน้าเดียว</p>")
     sizes, total = pages.page_sizes(pdf)

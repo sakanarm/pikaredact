@@ -56,6 +56,18 @@ def page_png(pdf: bytes, index: int, width_px: int = 1100) -> bytes:
         return page.get_pixmap(matrix=fitz.Matrix(z, z), alpha=False).tobytes("png")
 
 
+def _split_piece(p, cur, h, hits, same_line, next_line):
+    """(head rect, tail rect) when piece p is broken across a line end right after `cur`, else None."""
+    for k in range(len(p) - 2, 1, -1):
+        head = next((c for c in hits(p[:k]) if same_line(c, cur, h)), None)
+        if head is None:
+            continue
+        tail = next((c for c in hits(p[k:]) if next_line(c, head, max(head.height, 1))), None)
+        if tail is not None:
+            return head, tail
+    return None
+
+
 def _chain(page, parts: list[str], cache: dict) -> list[fitz.Rect]:
     """Boxes for a value split into pieces. LibreOffice drops the space glyph between Thai words, so the
     whole value is not searchable: find the pieces one by one and keep runs that sit next to each other
@@ -91,10 +103,17 @@ def _chain(page, parts: list[str], cache: dict) -> list[fitz.Rect]:
                 lines[-1] |= nxt
             else:
                 nxt = next((c for c in cand if next_line(c, cur, h)), None)
-                if nxt is None:
-                    lines = None
-                    break
-                lines.append(fitz.Rect(nxt))
+                if nxt is not None:
+                    lines.append(fitz.Rect(nxt))
+                else:
+                    # Thai lines also break inside a piece ("อำเภอ" | "เมืองนนทบุรี"): head ends this line, tail starts the next
+                    split = _split_piece(p, cur, h, hits, same_line, next_line)
+                    if split is None:
+                        lines = None
+                        break
+                    head, nxt = split
+                    lines[-1] |= head
+                    lines.append(fitz.Rect(nxt))
             cur = nxt
         if lines:
             out.extend(lines)
