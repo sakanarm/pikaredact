@@ -89,3 +89,8 @@ button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible,
 .xl td.num{text-align:right}
 .xl tr.xgap th.xr{border-top:3px double #C9C9C3}
 .xl td:not(.wrap) .tx{white-space:nowrap}
+
+/* account chip on small screens, where the sidebar is hidden */
+.mchip{display:none}
+@media (max-width:960px){.mchip{display:inline-flex;position:fixed;top:10px;right:12px;z-index:40;width:34px;height:34px;border-radius:99px;background:#18181B;color:#FDE047;align-items:center;justify-content:center;font:600 12px/1 'IBM Plex Mono',monospace;box-shadow:0 2px 8px rgba(0,0,0,.18)}}
+.ghost.on{background:#FFFFFF;box-shadow:0 0 0 1px #E4E4DF}

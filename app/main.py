@@ -20,10 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import config
+from . import auth, config
 from .detect import gazetteer
 from .detect.llm import Profile, get_profile, list_models, test_connection
 from .docio import SUPPORTED, find_leaks, open_document
@@ -63,6 +63,7 @@ class Job:
     outputs: dict = field(default_factory=dict)  # "highlight" | "redact" -> export summary (no values, no mapping)
     pages: dict = field(default_factory=dict)    # page-view key -> PDF bytes (source / previews), newest last
     seconds: float = 0.0
+    owner: int = 0                               # user id; only the owner can see the job, admins included
 
 
 JOBS: dict[str, Job] = {}
@@ -76,12 +77,57 @@ def _gc():
             JOBS.pop(k, None)
 
 
-def _job(job_id: str) -> Job:
+def _job(job_id: str, request: Request) -> Job:
     _gc()
     j = JOBS.get(job_id)
-    if not j:
+    if not j or j.owner != _me(request).id:   # someone else's job looks the same as a missing one
         raise HTTPException(404, "ไม่พบงานนี้ (อาจหมดอายุแล้ว — อัปโหลดใหม่อีกครั้ง)")
     return j
+
+
+# ---------------------------------------------------------------- sign-in gate
+OPEN_PATHS = {"/", "/login", "/health", "/analyze", "/anonymize"}   # /analyze, /anonymize: machine callers (LiteLLM guardrail)
+# The Presidio-compatible API stays open for LiteLLM on the same host; nginx should not expose it publicly.
+
+
+def _path(request: Request) -> str:
+    p, rp = request.scope.get("path", ""), request.scope.get("root_path", "")
+    if rp and p.startswith(rp):
+        p = p[len(rp):] or "/"
+    return p
+
+
+def _root(request: Request) -> str:
+    return request.scope.get("root_path", "").rstrip("/")
+
+
+def _me(request: Request) -> auth.User:
+    return getattr(request.state, "user", None) or auth.LOCAL_ADMIN
+
+
+def _who(request: Request) -> auth.User | None:
+    if auth.mode() == "off":
+        return auth.LOCAL_ADMIN
+    return auth.session_user(request.cookies.get(auth.COOKIE))[0]
+
+
+@app.middleware("http")
+async def _gate(request: Request, call_next):
+    path = _path(request)
+    if path in OPEN_PATHS or path.startswith(("/static/", "/auth/")):
+        return await call_next(request)
+    user = _who(request)
+    if user is None or not user.active:
+        state = "login" if user is None else user.role
+        if path.startswith("/api/"):
+            msg = "กรุณาเข้าสู่ระบบ" if user is None else (
+                "บัญชีนี้รอผู้ดูแลระบบอนุมัติ" if user.role == "pending" else "บัญชีนี้ถูกระงับการใช้งาน")
+            return JSONResponse({"detail": msg, "auth": state}, status_code=401 if user is None else 403)
+        return RedirectResponse(f"{_root(request)}/login" + ("" if user is None else f"?e={state}"), status_code=302)
+    if path.startswith("/api/admin/") and not user.is_admin:
+        return JSONResponse({"detail": "เฉพาะผู้ดูแลระบบ"}, status_code=403)
+    request.state.user = user
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------- settings & stats
@@ -123,16 +169,20 @@ def _db():
     cols = {r[1] for r in con.execute("pragma table_info(events)")}
     if "extra" not in cols:
         con.execute("alter table events add column extra text default '{}'")
+    if "uid" not in cols:
+        con.execute("alter table events add column uid int default 0")
     return con
 
 
 def _record(**kw):
     try:
         with _db() as con:
-            con.execute("insert into events values(?,?,?,?,?,?,?,?,?,?,?,?)",
+            con.execute("insert into events(ts, kind, ext, seconds, findings, by_type, by_layer, models, action, mode, leaks,"
+                        " extra, uid) values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (time.time(), kw.get("kind"), kw.get("ext"), kw.get("seconds", 0), kw.get("findings", 0),
                          json.dumps(kw.get("by_type", {})), json.dumps(kw.get("by_layer", {})), json.dumps(kw.get("models", [])),
-                         kw.get("action", ""), kw.get("mode", ""), kw.get("leaks", 0), json.dumps(kw.get("extra", {}))))
+                         kw.get("action", ""), kw.get("mode", ""), kw.get("leaks", 0), json.dumps(kw.get("extra", {})),
+                         int(kw.get("uid") or 0)))
     except sqlite3.Error:
         pass
 
@@ -170,6 +220,126 @@ def health():
     return {"ok": True, "jobs": len(JOBS)}
 
 
+# ---------------------------------------------------------------- sign-in
+def _base(request: Request) -> str:
+    """Absolute URL of the app root (no trailing slash), as the browser sees it."""
+    return auth.public_url() or str(request.base_url).rstrip("/")
+
+
+def _cookie_path(request: Request) -> str:
+    return (_root(request) or "") + "/"
+
+
+@app.get("/login", include_in_schema=False)
+def login_page(request: Request):
+    m = auth.mode()
+    if m == "off":
+        return RedirectResponse(f"{_root(request)}/app", status_code=302)
+    user = auth.session_user(request.cookies.get(auth.COOKIE))[0]
+    if user is not None and user.active and not request.query_params.get("e"):
+        return RedirectResponse(f"{_root(request)}/app", status_code=302)
+    return _page("login.html")
+
+
+@app.get("/auth/status")
+def auth_status(request: Request):
+    """For the login page: which sign-in to offer and, if signed in, the account's state."""
+    user = auth.session_user(request.cookies.get(auth.COOKIE))[0] if auth.mode() != "off" else None
+    return {"mode": auth.mode(), "methods": auth.methods(), "user": user.public() if user else None}
+
+
+@app.get("/auth/login", include_in_schema=False)
+def auth_login(request: Request, next: str = "app"):
+    if not auth.keycloak_enabled():
+        return RedirectResponse(f"{_root(request)}/login", status_code=302)
+    try:
+        url = auth.login_url(f"{_base(request)}/auth/callback", next)
+    except Exception:   # Keycloak unreachable: say so on the login page
+        return RedirectResponse(f"{_root(request)}/login?e=idp", status_code=302)
+    return RedirectResponse(url, status_code=302)
+
+
+def _signed_in(request: Request, user: auth.User, id_token: str, nxt: str) -> Response:
+    sid = auth.create_session(user.id, id_token)
+    target = f"{_root(request)}/{auth.safe_next(nxt)}" if user.active else f"{_root(request)}/login?e={user.role}"
+    resp = RedirectResponse(target, status_code=302)
+    resp.set_cookie(auth.COOKIE, sid, max_age=auth.session_seconds(), httponly=True, samesite="lax",
+                    secure=_base(request).startswith("https://"), path=_cookie_path(request))
+    return resp
+
+
+@app.get("/auth/callback", include_in_schema=False)
+def auth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    if error or not code or not state:
+        return RedirectResponse(f"{_root(request)}/login?e={'denied' if error else 'expired'}", status_code=302)
+    try:
+        user, id_token, nxt = auth.finish_login(code, state, f"{_base(request)}/auth/callback")
+    except auth.LoginError as e:
+        return RedirectResponse(f"{_root(request)}/login?e={e}", status_code=302)
+    except Exception:
+        return RedirectResponse(f"{_root(request)}/login?e=idp", status_code=302)
+    return _signed_in(request, user, id_token, nxt)
+
+
+def _client_ip(request: Request) -> str:
+    return (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            or (request.client.host if request.client else ""))
+
+
+@app.post("/auth/password", include_in_schema=False)
+async def auth_password(request: Request):
+    """Username + password sign-in (form post from the login page)."""
+    if not auth.password_enabled():
+        raise HTTPException(404)
+    form = await request.form()
+    try:
+        user = auth.password_login(str(form.get("username", ""))[:100], str(form.get("password", ""))[:200],
+                                   _client_ip(request))
+    except auth.LoginError as e:   # back to the form, keeping the page they were headed to (the #fragment)
+        nxt = auth.safe_next(str(form.get("next", "app")))
+        return RedirectResponse(f"{_root(request)}/login?e={e}{nxt[3:] if nxt.startswith('app#') else ''}", status_code=303)
+    resp = _signed_in(request, user, "", str(form.get("next", "app")))
+    resp.status_code = 303
+    return resp
+
+
+@app.get("/auth/logout", include_in_schema=False)
+def auth_logout(request: Request):
+    id_token = auth.end_session(request.cookies.get(auth.COOKIE))
+    url = auth.logout_url(id_token, f"{_base(request)}/login") or f"{_root(request)}/login?bye=1"
+    resp = RedirectResponse(url, status_code=302)
+    resp.delete_cookie(auth.COOKIE, path=_cookie_path(request))
+    return resp
+
+
+@app.get("/api/me")
+def api_me(request: Request):
+    return {**_me(request).public(), "auth": auth.mode(), "methods": auth.methods()}
+
+
+@app.post("/api/me/password")
+def change_password(request: Request, body: dict = Body(...)):
+    """Change your own password. Signs out your other sessions; this one gets a fresh cookie."""
+    me = _me(request)
+    if not me.id:
+        raise HTTPException(400, "ระบบไม่ได้เปิดการเข้าสู่ระบบ")
+    if not me.has_password:   # Microsoft-only account: the password lives with Microsoft (an admin can still set one)
+        raise HTTPException(400, "บัญชีนี้เข้าสู่ระบบด้วย Microsoft — เปลี่ยนรหัสผ่านที่บัญชี Microsoft")
+    try:
+        auth.password_login(me.email, str(body.get("current", ""))[:200], _client_ip(request))
+    except auth.LoginError as e:
+        raise HTTPException(400, "รหัสผ่านปัจจุบันไม่ถูกต้อง" if str(e) == "bad_password" else
+                            "ใส่รหัสผิดหลายครั้ง — รอ 5 นาทีแล้วลองใหม่")
+    try:
+        auth.set_password(me.id, str(body.get("new", "")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(auth.COOKIE, auth.create_session(me.id), max_age=auth.session_seconds(), httponly=True,
+                    samesite="lax", secure=_base(request).startswith("https://"), path=_cookie_path(request))
+    return resp
+
+
 # ---------------------------------------------------------------- config / settings / llm
 def _profiles_public() -> list[dict]:
     """Names and env var names only: base URLs and keys never leave the server."""
@@ -179,18 +349,20 @@ def _profiles_public() -> list[dict]:
 
 
 @app.get("/api/config")
-def api_config():
+def api_config(request: Request):
+    me = _me(request)
     return {
+        "me": me.public(), "auth": auth.mode(), "methods": auth.methods(), "role_labels": auth.ROLE_LABELS,
         "entity_types": ENTITY_TYPES, "modes": MODES, "layers": LAYER_LABELS, "supported": SUPPORTED,
         "max_upload_mb": config.MAX_UPLOAD_MB, "review_score": config.REVIEW_SCORE,
         "min_score": config.MIN_SCORE, "auto_accept_score": config.AUTO_ACCEPT_SCORE,
         "llm": {"temperature": 0, "chunk_chars": config.LLM_CHUNK_CHARS, "concurrency": config.LLM_CONCURRENCY,
                 "timeout": config.LLM_TIMEOUT, "verify_tls": config.LLM_VERIFY_TLS},
         "profiles": _profiles_public(), "default_profile": config.default_llm_profile(),
-        "settings": load_settings(), "ttl_minutes": config.JOB_TTL_SECONDS // 60,
+        "settings": _settings_out(me), "ttl_minutes": config.JOB_TTL_SECONDS // 60,
         "lists": {k: v[1] for k, v in gazetteer.LIST_FILES.items()},
         "packs": public_packs(), "law": law_map(), "presets": PRESETS,
-        "active_types": _active_types(),
+        "active_types": _active_types(settings_for(me)),
     }
 
 
@@ -199,46 +371,120 @@ def _active_types(s: dict | None = None) -> list[str]:
     return effective_types(s["packs_on"], s.get("types_off"))
 
 
-@app.get("/api/settings")
-def get_settings():
-    return load_settings()
+def _personal(user: auth.User) -> bool:
+    """Signed-in people keep their own settings and lists; with sign-in off there is only the shared set."""
+    return bool(user.id)
 
 
-@app.put("/api/settings")
-async def put_settings(request: Request):
-    body = await request.json()
-    known = {p["name"] for p in _profiles_public()}
+def settings_for(user: auth.User) -> dict:
+    """Shared settings with the person's own choices on top. Anything they never set follows the shared value,
+    so an admin's change to the shared LLM reaches everyone who has not picked their own."""
     s = load_settings()
-    if "profiles" in body:
-        s["profiles"] = [{"name": str(p.get("name", "")).lower(), "model": str(p.get("model", ""))[:200]}
-                         for p in body["profiles"] if str(p.get("name", "")).lower() in known][:6]
+    if not _personal(user):
+        return s
+    own = auth.user_settings(user.id)
+    if isinstance(own.get("models"), dict):
+        s["models"] = {**s["models"], **own["models"]}
+    s.update({k: v for k, v in own.items() if k != "models"})
+    s["packs_on"] = clean_pack_ids(s.get("packs_on"))
+    return s
+
+
+def _settings_out(user: auth.User, scope: str = "own") -> dict:
+    if scope == "central" or not _personal(user):
+        s, own = load_settings(), []
+    else:
+        s, own = settings_for(user), sorted(auth.user_settings(user.id))
+    return {**s, "active_types": _active_types(s), "_scope": "central" if scope == "central" or not _personal(user) else "own",
+            "_own": own}
+
+
+def _clean_patch(body: dict) -> dict:
+    """The keys of a settings change that are valid, already cleaned. Unknown keys are dropped."""
+    known = {p["name"] for p in _profiles_public()}
+    out: dict = {}
+    if isinstance(body.get("profiles"), list):
+        out["profiles"] = [{"name": str(p.get("name", "")).lower(), "model": str(p.get("model", ""))[:200]}
+                           for p in body["profiles"] if isinstance(p, dict) and str(p.get("name", "")).lower() in known][:6]
     if body.get("combine") in ("union", "vote"):
-        s["combine"] = body["combine"]
+        out["combine"] = body["combine"]
     if "min_agree" in body:
-        s["min_agree"] = max(2, min(6, int(body["min_agree"])))
+        try:
+            out["min_agree"] = max(2, min(6, int(body["min_agree"])))
+        except (TypeError, ValueError):
+            pass
     if body.get("mode") in MODES:
-        s["mode"] = body["mode"]
+        out["mode"] = body["mode"]
     for k in ("sanitize", "use_llm"):
         if k in body:
-            s[k] = bool(body[k])
+            out[k] = bool(body[k])
     if isinstance(body.get("models"), dict):
-        s["models"].update({str(k).lower(): str(v)[:200] for k, v in body["models"].items() if str(k).lower() in known})
+        out["models"] = {str(k).lower(): str(v)[:200] for k, v in body["models"].items() if str(k).lower() in known}
     if "default_connector" in body:
         d = str(body["default_connector"]).lower()
         if d in known or d == "none":
-            s["default_connector"] = d
+            out["default_connector"] = d
     if isinstance(body.get("layers"), dict):
-        s["layers"] = {k: bool(body["layers"].get(k, True)) for k in ("ner", "list")}
+        out["layers"] = {k: bool(body["layers"].get(k, True)) for k in ("ner", "list")}
     if isinstance(body.get("type_modes"), dict):
-        s["type_modes"] = {k: v for k, v in body["type_modes"].items() if k in ENTITY_TYPES and k != "SECRET" and v in MODES}
+        out["type_modes"] = {k: v for k, v in body["type_modes"].items() if k in ENTITY_TYPES and k != "SECRET" and v in MODES}
     if isinstance(body.get("types_off"), list):
-        s["types_off"] = [t for t in body["types_off"] if t in ENTITY_TYPES and t != "SECRET"]
+        out["types_off"] = [t for t in body["types_off"] if t in ENTITY_TYPES and t != "SECRET"]
     if isinstance(body.get("packs_on"), list):
-        s["packs_on"] = clean_pack_ids(body["packs_on"])
+        out["packs_on"] = clean_pack_ids(body["packs_on"])
     if body.get("default_output") in ("ask", "redact", "highlight"):
-        s["default_output"] = body["default_output"]
-    SETTINGS_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {**s, "active_types": _active_types(s)}
+        out["default_output"] = body["default_output"]
+    return out
+
+
+def _scope(request: Request, scope: str) -> str:
+    """'central' (shared, admins only) or 'own'. With sign-in off everything is shared."""
+    me = _me(request)
+    if not _personal(me):
+        return "central"
+    if scope == "central":
+        if not me.is_admin:
+            raise HTTPException(403, "ค่ากลางแก้ได้เฉพาะผู้ดูแลระบบ")
+        return "central"
+    return "own"
+
+
+@app.get("/api/settings")
+def get_settings(request: Request, scope: str = "own"):
+    me = _me(request)
+    return _settings_out(me, _scope(request, scope) if scope == "central" else "own")
+
+
+@app.put("/api/settings")
+async def put_settings(request: Request, scope: str = "own"):
+    me = _me(request)
+    where = _scope(request, scope)
+    patch = _clean_patch(await request.json())
+    if where == "central":
+        s = load_settings()
+        if "models" in patch:
+            s["models"].update(patch.pop("models"))
+        s.update(patch)
+        SETTINGS_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        own = auth.user_settings(me.id)
+        if "models" in patch:
+            own["models"] = {**(own.get("models") or {}), **patch.pop("models")}
+        own.update(patch)
+        auth.save_user_settings(me.id, own)
+    return _settings_out(me, where)
+
+
+@app.delete("/api/settings")
+def reset_settings(request: Request, keys: str = ""):
+    """Drop the person's own choices (all, or the comma-separated `keys`) so they follow the shared settings again."""
+    me = _me(request)
+    if _personal(me):
+        own = auth.user_settings(me.id)
+        for k in ([k for k in keys.split(",") if k] or list(own)):
+            own.pop(k, None)
+        auth.save_user_settings(me.id, own)
+    return _settings_out(me)
 
 
 def _profile_or_404(name: str, model: str | None = None) -> Profile:
@@ -268,25 +514,32 @@ async def api_test(request: Request):
 
 
 # ---------------------------------------------------------------- lists
+def _count(content: str) -> int:
+    return sum(1 for line in content.splitlines() if line.strip() and not line.lstrip().startswith("#"))
+
+
 @app.get("/api/lists/{name}")
-def get_list(name: str):
+def get_list(name: str, request: Request, scope: str = "own"):
+    """scope=own: the person's own list (a scan uses it on top of the shared one). scope=central: the shared list."""
     if name not in gazetteer.LIST_FILES:
         raise HTTPException(404)
-    content = gazetteer.read_list(name)
-    count = sum(1 for line in content.splitlines() if line.strip() and not line.lstrip().startswith("#"))
+    uid = None if _scope(request, scope) == "central" else _me(request).id
+    content = gazetteer.read_list(name, uid)
     try:
-        updated = gazetteer.list_path(name).stat().st_mtime
+        updated = gazetteer.list_path(name, uid).stat().st_mtime
     except OSError:
         updated = None
-    return {"name": name, "content": content, "count": count, "updated": updated}
+    return {"name": name, "content": content, "count": _count(content), "updated": updated,
+            "scope": "central" if uid is None else "own", "central_count": _count(gazetteer.read_list(name))}
 
 
 @app.put("/api/lists/{name}")
-async def put_list(name: str, request: Request):
+async def put_list(name: str, request: Request, scope: str = "own"):
     if name not in gazetteer.LIST_FILES:
         raise HTTPException(404)
+    uid = None if _scope(request, scope) == "central" else _me(request).id
     body = await request.json()
-    gazetteer.write_list(name, str(body.get("content", ""))[:500_000])
+    gazetteer.write_list(name, str(body.get("content", ""))[:500_000], uid)
     return {"ok": True}
 
 
@@ -306,6 +559,7 @@ def _run(job: Job):
     def prog(stage, done=0, total=0):
         job.stage, job.done, job.total = stage, done, total
 
+    gazetteer.owner.set(job.owner or None)   # this worker thread scans with the owner's personal lists
     try:
         opts = job.options
         res = detect(job.doc.segments, profiles=_profiles_for(opts) if opts.get("use_llm") else None,
@@ -316,13 +570,13 @@ def _run(job: Job):
         job.seconds = time.perf_counter() - t0
         _record(kind="scan", ext=job.doc.ext, seconds=job.seconds, findings=len(res.findings),
                 by_type=dict(Counter(f.entity_type for f in res.findings)),
-                by_layer=dict(Counter(primary_layer(f) for f in res.findings)), models=res.llm_used)
+                by_layer=dict(Counter(primary_layer(f) for f in res.findings)), models=res.llm_used, uid=job.owner)
     except Exception as e:  # keep the message generic: it may echo document text
         job.status, job.error = "error", f"ตรวจไม่สำเร็จ ({type(e).__name__})"
 
 
 @app.post("/api/jobs")
-async def create_job(file: UploadFile | None = File(None), text: str = Form(""), options: str = Form("{}")):
+async def create_job(request: Request, file: UploadFile | None = File(None), text: str = Form(""), options: str = Form("{}")):
     _gc()
     try:
         opts = json.loads(options or "{}")
@@ -343,12 +597,13 @@ async def create_job(file: UploadFile | None = File(None), text: str = Form(""),
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(400, f"เปิดไฟล์ไม่ได้ ({type(e).__name__}) — ไฟล์อาจเสียหรือมีรหัสผ่าน")
-    s = load_settings()
+    me = _me(request)
+    s = settings_for(me)
     merged = {k: opts.get(k, s[k]) for k in ("profiles", "combine", "min_agree", "use_llm", "layers", "sanitize")}
     packs = clean_pack_ids(opts["packs"]) if isinstance(opts.get("packs"), list) else s["packs_on"]
     merged["entities"] = effective_types(packs, s.get("types_off"))
     merged["packs"] = packs
-    job = Job(uuid.uuid4().hex, name, doc, options=merged)
+    job = Job(uuid.uuid4().hex, name, doc, options=merged, owner=me.id)
     with _lock:
         JOBS[job.id] = job
     _pool.submit(_run, job)
@@ -364,8 +619,8 @@ def _finding_json(f: Finding) -> dict:
 
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str):
-    j = _job(job_id)
+def get_job(job_id: str, request: Request):
+    j = _job(job_id, request)
     out = {"id": j.id, "filename": j.filename, "status": j.status, "stage": j.stage, "done": j.done, "total": j.total,
            "error": j.error, "kind": j.doc.kind, "page_view": pageview.available(j.doc.kind), "ext": j.doc.ext, "highlight_ext": getattr(j.doc, "highlight_ext", j.doc.ext),
            "created": j.created, "expires": j.created + config.JOB_TTL_SECONDS, "options": {
@@ -383,9 +638,11 @@ def get_job(job_id: str):
 
 
 @app.delete("/api/jobs/{job_id}")
-def delete_job(job_id: str):
+def delete_job(job_id: str, request: Request):
     with _lock:
-        JOBS.pop(job_id, None)
+        j = JOBS.get(job_id)
+        if j and j.owner == _me(request).id:
+            JOBS.pop(job_id, None)
     return {"ok": True}
 
 
@@ -435,7 +692,7 @@ def _redact_opts(body: dict) -> tuple[str, dict]:
 @app.post("/api/jobs/{job_id}/preview")
 async def preview(job_id: str, request: Request):
     """Replacement text for every chosen finding, so the review screen can show the redacted view."""
-    j = _job(job_id)
+    j = _job(job_id, request)
     if j.status != "done":
         raise HTTPException(409, "ยังตรวจไม่เสร็จ")
     body = await request.json()
@@ -450,7 +707,7 @@ async def preview(job_id: str, request: Request):
 
 @app.post("/api/jobs/{job_id}/export")
 async def export(job_id: str, request: Request):
-    j = _job(job_id)
+    j = _job(job_id, request)
     if j.status != "done":
         raise HTTPException(409, "ยังตรวจไม่เสร็จ")
     body = await request.json()
@@ -503,7 +760,7 @@ async def export(job_id: str, request: Request):
     seconds = time.perf_counter() - t0
     _record(kind="export", ext=j.doc.ext, seconds=seconds, findings=len(chosen), by_type=counts, action=action, mode=mode,
             leaks=len(leaks), by_layer=dict(Counter(primary_layer(f) for f in chosen)),
-            models=[m["model"] for m in j.result.models],
+            models=[m["model"] for m in j.result.models], uid=j.owner,
             extra={"found": len(system), "accepted_system": len(system) - len(rejected), "manual": manual,
                    "rejected": len(rejected), "rejected_by_type": dict(Counter(f.entity_type for f in rejected)),
                    "found_by_type": dict(Counter(f.entity_type for f in system)),
@@ -573,9 +830,9 @@ def _page_pdf(j: Job, what: str, body: dict) -> tuple[str, bytes]:
 
 
 @app.post("/api/jobs/{job_id}/pages")
-def pages(job_id: str, body: dict = Body(...)):
+def pages(job_id: str, request: Request, body: dict = Body(...)):
     """Document as pages. what = source (with boxes for `items`) | redact | highlight (the file the export would make)."""
-    j = _job(job_id)
+    j = _job(job_id, request)
     if j.status != "done":
         raise HTTPException(409, "ยังตรวจไม่เสร็จ")
     what = body.get("what", "source")
@@ -599,8 +856,8 @@ def pages(job_id: str, body: dict = Body(...)):
 
 
 @app.get("/api/jobs/{job_id}/pages/{key}/{n}.png")
-def page_image(job_id: str, key: str, n: int, w: int = 1100):
-    j = _job(job_id)
+def page_image(job_id: str, key: str, n: int, request: Request, w: int = 1100):
+    j = _job(job_id, request)
     pdf = j.pages.get(key)
     if pdf is None:
         raise HTTPException(404)
@@ -612,8 +869,8 @@ def page_image(job_id: str, key: str, n: int, w: int = 1100):
 
 
 @app.get("/api/jobs/{job_id}/files/{name}")
-def download(job_id: str, name: str):
-    j = _job(job_id)
+def download(job_id: str, name: str, request: Request):
+    j = _job(job_id, request)
     if name not in j.files:
         raise HTTPException(404)
     data, media = j.files[name]
@@ -625,9 +882,13 @@ def download(job_id: str, name: str):
 _EVENT_COLS = "ts, kind, ext, seconds, findings, by_type, by_layer, models, action, mode, leaks, extra"
 
 
-def _events(since: float, until: float, ext: str, model: str) -> list[dict]:
+def _events(since: float, until: float, ext: str, model: str, uid: int | None = None) -> list[dict]:
+    """uid None = everyone's events (admins); a number = that person's only."""
+    q, args = f"select {_EVENT_COLS} from events where ts >= ? and ts < ?", [since, until]
+    if uid is not None:
+        q, args = q + " and uid = ?", args + [uid]
     with _db() as con:
-        rows = con.execute(f"select {_EVENT_COLS} from events where ts >= ? and ts < ? order by ts", (since, until)).fetchall()
+        rows = con.execute(q + " order by ts", args).fetchall()
     out = []
     for r in rows:
         e = dict(zip(_EVENT_COLS.split(", "), r))
@@ -662,12 +923,15 @@ def _summary(events: list[dict]) -> dict:
 
 
 @app.get("/api/stats")
-def stats(days: int = 30, ext: str = "", model: str = ""):
+def stats(request: Request, days: int = 30, ext: str = "", model: str = "", mine: int = 0):
+    """Admins see everyone's numbers (or only their own with mine=1); everyone else sees their own."""
+    me = _me(request)
+    uid = None if me.is_admin and not mine else me.id
     days = max(1, min(days, 365))
     now = time.time()
     since = now - days * 86400
-    cur = _events(since, now + 1, ext, model)
-    prev = _events(since - days * 86400, since, ext, model)
+    cur = _events(since, now + 1, ext, model, uid)
+    prev = _events(since - days * 86400, since, ext, model, uid)
     scans = [e for e in cur if e["kind"] == "scan"]
     exports = [e for e in cur if e["kind"] == "export"]
     rich = [e for e in exports if "found" in e["extra"]]
@@ -704,8 +968,9 @@ def stats(days: int = 30, ext: str = "", model: str = ""):
         d["acc"] += e["extra"]["accepted_system"]
         d["manual"] += e["extra"]["manual"]
 
-    with _db() as con:   # filter choices come from every event, not just the filtered range
-        all_rows = con.execute("select ext, models from events").fetchall()
+    with _db() as con:   # filter choices come from every event in view, not just the filtered range
+        all_rows = con.execute("select ext, models from events" + ("" if uid is None else " where uid = ?"),
+                               () if uid is None else (uid,)).fetchall()
     exts = sorted({(r[0] or "").lstrip(".").lower() for r in all_rows if r[0]})
     models = sorted({m.split("/")[0] for r in all_rows for m in json.loads(r[1] or "[]")})
 
@@ -719,6 +984,7 @@ def stats(days: int = 30, ext: str = "", model: str = ""):
         "found_by_type": dict(found_by_type), "rejected_by_type": dict(rejected_by_type),
         "found_by_layer": dict(found_by_layer), "accepted_by_layer": dict(accepted_by_layer), "manual": manual,
         "outputs": dict(outputs), "per_ext": per_ext, "filters": {"exts": exts, "models": models},
+        "scope": "all" if uid is None else "mine",
     }
 
 
@@ -729,6 +995,72 @@ def leaderboard():
         return json.loads((VAR / "leaderboard.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"rows": [], "columns": [], "dataset": None}
+
+
+# ---------------------------------------------------------------- admin: users (the gate already checked the role)
+def _admin_payload() -> dict:
+    return {"users": [u.public() for u in auth.list_users()], "new_user_role": auth.new_user_role(),
+            "auth": auth.mode(), "methods": auth.methods(), "min_password": auth.MIN_PASSWORD, "roles": [{"id": r, "label": auth.ROLE_LABELS[r]} for r in auth.ROLES]}
+
+
+@app.get("/api/admin/users")
+def admin_users():
+    return _admin_payload()
+
+
+@app.post("/api/admin/users")
+def admin_add_user(request: Request, body: dict = Body(...)):
+    try:
+        auth.add_user(str(body.get("email", "")), str(body.get("role", "user")), str(body.get("name", "")),
+                      added_by=_me(request).email, password=str(body.get("password", "")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _admin_payload()
+
+
+def _target(request: Request, uid: int) -> auth.User:
+    u = auth.get_user(uid)
+    if u is None:
+        raise HTTPException(404, "ไม่พบผู้ใช้นี้")
+    if u.id == _me(request).id:
+        raise HTTPException(400, "เปลี่ยนบทบาทหรือลบบัญชีของตัวเองไม่ได้")
+    if u.email in auth.admin_emails():
+        raise HTTPException(400, "ผู้ดูแลระบบนี้กำหนดไว้ในการตั้งค่าเซิร์ฟเวอร์ แก้จากหน้านี้ไม่ได้")
+    return u
+
+
+@app.patch("/api/admin/users/{uid}")
+def admin_set_role(uid: int, request: Request, body: dict = Body(...)):
+    """{role} and/or {password} (reset: the person is signed out everywhere)."""
+    _target(request, uid)
+    try:
+        if "role" in body:
+            auth.set_role(uid, str(body.get("role", "")))
+        if body.get("password"):
+            auth.set_password(uid, str(body["password"]))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _admin_payload()
+
+
+@app.delete("/api/admin/users/{uid}")
+def admin_delete_user(uid: int, request: Request):
+    _target(request, uid)
+    auth.delete_user(uid)
+    gazetteer.drop_user_lists(uid)
+    with _lock:   # their open jobs go too
+        for k in [k for k, j in JOBS.items() if j.owner == uid]:
+            JOBS.pop(k, None)
+    return _admin_payload()
+
+
+@app.put("/api/admin/policy")
+def admin_policy(body: dict = Body(...)):
+    role = body.get("new_user_role")
+    if role not in ("pending", "user"):
+        raise HTTPException(400, "new_user_role ต้องเป็น pending หรือ user")
+    auth.kv_set("new_user_role", role)
+    return _admin_payload()
 
 
 # ---------------------------------------------------------------- Presidio-compatible API (LiteLLM guardrail)

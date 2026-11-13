@@ -123,6 +123,12 @@ PR.api = async (path, opts = {}) => {
   const ct = r.headers.get("content-type") || "";
   const body = ct.includes("json") ? await r.json().catch(() => null) : await r.text();
   if (!r.ok) {
+    // signed out (or the account was paused) while the app was open: back to the login page, keep the place
+    if ((r.status === 401 || r.status === 403) && body && body.auth) {
+      const e = body.auth === "login" ? "" : `?e=${encodeURIComponent(body.auth)}`;
+      location.href = `login${e}${location.hash}`;
+      throw Object.assign(new Error(body.detail || "กรุณาเข้าสู่ระบบ"), { status: r.status });
+    }
     let msg = `เกิดข้อผิดพลาด (HTTP ${r.status})`;
     if (body && body.detail) msg = typeof body.detail === "string" ? body.detail : (body.detail[0] && body.detail[0].msg) || msg;
     if (r.status === 404 && path.includes("api/jobs/")) msg = "ไม่พบงานนี้แล้ว ไฟล์อาจหมดเวลาและถูกลบ";
@@ -139,16 +145,17 @@ PR.store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* private mode */ } },
 };
 
-/* job history: names and counts only, never the values that were found */
+/* job history: names and counts only, never the values that were found. One list per signed-in person. */
+const histKey = () => { const id = PR.cfg && PR.cfg.me && PR.cfg.me.id; return id ? `pr.history.${id}` : "pr.history"; };
 PR.hist = {
-  all() { return PR.store.get("pr.history", []); },
+  all() { return PR.store.get(histKey(), []); },
   get(id) { return PR.hist.all().find((h) => h.id === id); },
   put(id, patch) {
     const a = PR.hist.all();
     const i = a.findIndex((h) => h.id === id);
     if (i >= 0) Object.assign(a[i], patch);
     else a.unshift(Object.assign({ id }, patch));
-    PR.store.set("pr.history", a.slice(0, 30));
+    PR.store.set(histKey(), a.slice(0, 30));
   },
   state(h) {
     if (!h.expires || h.expires <= Date.now() / 1000) return "gone";
@@ -290,6 +297,23 @@ PR.restoreParts = (text, mapping) => {
   return { parts, hit, miss, text: parts.map((p) => p.t).join("") };
 };
 
+/* ---------------------------------------------------------------- who is signed in */
+PR.me = () => (PR.cfg && PR.cfg.me) || { id: 0, role: "admin", name: "", email: "" };
+PR.signedIn = () => !!(PR.cfg && PR.cfg.auth === "on" && PR.me().id);
+PR.isAdmin = () => PR.me().role === "admin";
+PR.initials = (u) => {
+  const s = String((u && (u.name || u.email)) || "").trim();
+  if (/^[฀-๿]/.test(s)) return s[0];   // Thai: the first letter (a second one could be a vowel mark)
+  const words = s.split(/[\s._@-]+/).filter(Boolean);
+  const two = words.length > 1 ? words[0][0] + words[1][0] : s.slice(0, 2);
+  return (two || "PR").toUpperCase();
+};
+const ROLE_COLORS = { admin: ["#18181B", "#FDE047"], user: ["#DBEAFE", "#1E40AF"], pending: ["#FEF3C7", "#92400E"], disabled: ["#FEE2E2", "#991B1B"] };
+PR.roleChip = (role) => {
+  const c = ROLE_COLORS[role] || ["#F1F5F9", "#334155"];
+  return { label: ((PR.cfg && PR.cfg.role_labels) || {})[role] || role, bg: c[0], fg: c[1] };
+};
+
 /* ---------------------------------------------------------------- shell */
 PR.ttlMinutes = () => (PR.cfg ? PR.cfg.ttl_minutes : 60);
 PR.connector = () => {
@@ -329,6 +353,11 @@ function shellVals() {
     connFg: c ? (c.ready ? "#166534" : "#92400E") : "#52525B",
     connDot: c ? (c.ready ? "#16A34A" : "#D97706") : "#A1A1AA",
     ttlNote: `ไฟล์ลบอัตโนมัติใน ${PR.ttlMinutes()} นาที`,
+    signedIn: PR.signedIn(), notSignedIn: !PR.signedIn(), isAdmin: PR.signedIn() && PR.isAdmin(),
+    meName: PR.me().name || PR.me().email, meEmail: PR.me().email, meInit: PR.initials(PR.me()),
+    meRole: PR.roleChip(PR.me().role),
+    usersOn: on(r.name === "admin"), usersCur: cur(r.name === "admin"),
+    acctOn: on(r.name === "account"), acctCur: cur(r.name === "account"),
   };
 }
 
@@ -337,12 +366,15 @@ const ROUTES = [
   [/^\/upload$/, "upload"], [/^\/review\/([0-9a-f]+)$/, "review"],
   [/^\/result\/([0-9a-f]+)\/(redact|highlight)$/, "result"], [/^\/restore$/, "restore"],
   [/^\/(analytics|leaderboard)$/, "analytics"], [/^\/settings\/(conn|lists|rules)$/, "settings"],
+  [/^\/admin\/users$/, "admin"], [/^\/account$/, "account"],
 ];
 function route() {
   const path = location.hash.replace(/^#/, "") || "/upload";
   for (const [re, name] of ROUTES) {
     const m = path.match(re);
     if (!m) continue;
+    if (name === "admin" && !PR.isAdmin()) break;
+    if (name === "account" && !PR.signedIn()) break;
     const view = PR.views[name];
     const prev = PR.current;
     const same = PR.route && PR.route.path === path;
@@ -363,7 +395,7 @@ PR.go = (hash) => { if (location.hash === hash) route(); else location.hash = ha
 async function boot() {
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
-  const names = ["shell", "upload", "review", "result", "restore_section", "restore", "settings", "analytics"];
+  const names = ["shell", "upload", "review", "result", "restore_section", "restore", "settings", "analytics", "admin", "account"];
   try {
     const [cfg, ...tpls] = await Promise.all([
       PR.api("api/config"),

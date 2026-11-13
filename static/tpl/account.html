@@ -1,0 +1,48 @@
+<main class="mainp" style="flex: 1; min-width: 0; margin: 10px 10px 10px 0; background: #FFFFFF; border: 1px solid #E7E7E2; border-radius: 16px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-bottom: 1px solid #EFEFEA">
+<div style="font-size: 13.5px; color: #71717A">บัญชี <span style="margin: 0 6px">/</span><span style="color: #18181B; font-weight: 500">บัญชีของฉัน</span></div>
+<a href="auth/logout" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #18181B; border: 1px solid #E4E4DF; padding: 0 12px; min-height: 34px; border-radius: 8px; text-decoration: none" class="ghost"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>ออกจากระบบ</a>
+</div>
+
+<div style="padding: 24px 28px 40px; max-width: 880px">
+<h1 style="margin: 0; font-size: 28px; letter-spacing: -0.015em; font-weight: 650">บัญชีของฉัน</h1>
+
+<section class="card" aria-label="ข้อมูลบัญชี" style="margin-top: 18px; padding: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px">
+<span aria-hidden="true" style="flex: none; width: 56px; height: 56px; border-radius: 99px; background: #18181B; color: #FDE047; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 650">{{init}}</span>
+<div style="flex: 1 1 220px; min-width: 0">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span style="font-size: 18px; font-weight: 600">{{name}}</span><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: {{chip.bg}}; color: {{chip.fg}}">{{chip.label}}</span></div>
+<div class="mono" style="margin-top: 2px; font-size: 13px; color: #52525B; overflow-wrap: anywhere">{{login}}</div>
+<div style="margin-top: 4px; font-size: 12.5px; color: #71717A">เข้าสู่ระบบด้วย{{via}}<sc-if value="{{since}}"> · {{since}}</sc-if></div>
+</div>
+</section>
+
+<section class="card" aria-labelledby="ac-set" style="margin-top: 16px; padding: 18px">
+<h2 id="ac-set" style="margin: 0; font-size: 15px; font-weight: 600">การตั้งค่าของฉัน</h2>
+<p style="margin: 6px 0 0; font-size: 13.5px; line-height: 1.7; color: #52525B">การตั้งค่าและรายชื่อที่คุณแก้ในหน้า “ตั้งค่า” ใช้กับงานของคุณคนเดียว เรื่องที่ไม่ได้ตั้งเอง (รวมถึง AI ที่ใช้ตรวจ) จะใช้ค่ากลางที่ผู้ดูแลระบบกำหนด</p>
+<sc-if value="{{ownNone}}"><div style="margin-top: 12px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #166534; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 6px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>ใช้ค่ากลางทั้งหมด</div></sc-if>
+<sc-if value="{{ownSome}}">
+<div style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<span style="flex: 1 1 260px; font-size: 13px; color: #3F3F46; line-height: 1.6">ตั้งเอง {{ownN}} เรื่อง: <span style="color: #52525B">{{ownList}}</span></span>
+<button type="button" class="ghost" onClick="{{useCentral}}" {{{resetBusy}}} style="border: 1px solid #E4E4DF; background: #FFFFFF; color: #18181B; border-radius: 10px; padding: 0 14px; min-height: 38px; font: inherit; font-size: 13px; cursor: pointer">กลับไปใช้ค่ากลางทั้งหมด</button>
+</div>
+</sc-if>
+<div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px"><a href="#/settings/conn" style="color: #2563EB">Model connector</a><a href="#/settings/lists" style="color: #2563EB">รายชื่อและคำยกเว้น</a><a href="#/settings/rules" style="color: #2563EB">การตรวจจับ</a></div>
+</section>
+
+<sc-if value="{{canPw}}">
+<section class="card" aria-labelledby="ac-pw" style="margin-top: 16px; padding: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px"><h2 id="ac-pw" style="margin: 0; font-size: 15px; font-weight: 600">เปลี่ยนรหัสผ่าน</h2><button type="button" class="lnkbtn" onClick="{{toggle}}" style="font-size: 13px">{{eyeLabel}}</button></div>
+<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 420px">
+<label style="font-size: 12.5px; color: #52525B">รหัสผ่านปัจจุบัน<input id="ac-cur" class="inp" type="{{pwType}}" value="{{cur}}" onInput="{{onCur}}" onKeydown="{{onKey}}" autocomplete="current-password" style="display: block; width: 100%; margin-top: 4px"></label>
+<label style="font-size: 12.5px; color: #52525B">รหัสผ่านใหม่<input id="ac-new" class="inp" type="{{pwType}}" value="{{nw}}" onInput="{{onNw}}" onKeydown="{{onKey}}" autocomplete="new-password" style="display: block; width: 100%; margin-top: 4px"><span style="display: block; margin-top: 4px; font-size: 12px; color: {{strength.fg}}">{{strength.text}}</span></label>
+<label style="font-size: 12.5px; color: #52525B">ยืนยันรหัสผ่านใหม่<input id="ac-new2" class="inp" type="{{pwType}}" value="{{nw2}}" onInput="{{onNw2}}" onKeydown="{{onKey}}" autocomplete="new-password" style="display: block; width: 100%; margin-top: 4px"></label>
+<sc-if value="{{err}}"><div role="alert" style="font-size: 13px; color: #B91C1C">{{err}}</div></sc-if>
+<div><button type="button" onClick="{{save}}" {{{busy}}} style="border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 0 16px; min-height: 40px; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer">{{btn}}</button></div>
+</div>
+</section>
+</sc-if>
+<sc-if value="{{ssoOnly}}">
+<section class="card" style="margin-top: 16px; padding: 16px 18px; font-size: 13.5px; color: #52525B; line-height: 1.7">บัญชีนี้เข้าสู่ระบบด้วย Microsoft ขององค์กร — เปลี่ยนรหัสผ่านที่บัญชี Microsoft</section>
+</sc-if>
+</div>
+</main>

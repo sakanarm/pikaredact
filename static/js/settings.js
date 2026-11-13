@@ -1,5 +1,7 @@
 /* Settings: model connectors (from the server's .env), name lists, and detection rules.
-   Everything here is shared by all users of this server and saved through /api/settings. */
+   Signed in, each person edits their own values (scope "own"); whatever they have not set follows the
+   shared values. Admins can switch to scope "central" to edit the shared values everyone falls back to.
+   With sign-in off there is only the shared scope. */
 (() => {
 "use strict";
 const PR = window.PR;
@@ -65,10 +67,16 @@ const S = {
   tests: {},    // connector -> { busy, res }
   lists: {},    // list name -> { loading, loaded, content, count, updated, q, editing, draft, busy, error, note }
   savedNote: "", noteTimer: 0,
+  scope: "own", central: null, scopeBusy: false, resetting: false,
 };
 
 const cfg = () => PR.cfg;
-const settings = () => cfg().settings || {};
+const personal = () => PR.signedIn();
+const canCentral = () => personal() && PR.isAdmin();
+const central = () => S.scope === "central" && canCentral();
+const qs = () => (central() ? "?scope=central" : "");
+/* the values this page edits: the shared ones in central scope, otherwise what applies to me */
+const settings = () => (central() ? S.central || {} : cfg().settings || {});
 const profiles = () => cfg().profiles || [];
 const defaultName = () => {
   const d = settings().default_connector;
@@ -140,11 +148,18 @@ async function runTest(name) {
   PR.render();
 }
 
-async function saveSettings(patch, note) {
-  const s = await PR.api("api/settings", PR.json("PUT", patch));
+function applyMine(s) {
   if (s.active_types) cfg().active_types = s.active_types;
   cfg().settings = s;
   if (PR.resetUploadDefaults) PR.resetUploadDefaults();
+}
+
+async function saveSettings(patch, note) {
+  const s = await PR.api(`api/settings${qs()}`, PR.json("PUT", patch));
+  if (central()) {
+    S.central = s;
+    applyMine(await PR.api("api/settings"));   // what applies to me follows the shared values I have not set
+  } else applyMine(s);
   if (note) {
     S.savedNote = note;
     clearTimeout(S.noteTimer);
@@ -273,7 +288,7 @@ function connVals() {
 
 /* ---------------------------------------------------------------- lists */
 const listNames = () => Object.keys(cfg().lists || {});
-const LS = (name) => S.lists[name] || (S.lists[name] = { q: "", draft: "" });
+const LS = (name) => { const k = `${central() ? "central" : "own"}:${name}`; return S.lists[k] || (S.lists[k] = { q: "", draft: "" }); };
 
 async function loadList(name) {
   const L = LS(name);
@@ -281,8 +296,9 @@ async function loadList(name) {
   L.loading = true;
   PR.render();
   try {
-    const r = await PR.api(`api/lists/${encodeURIComponent(name)}`);
-    Object.assign(L, { content: r.content || "", count: r.count || 0, updated: r.updated, loaded: true, error: "" });
+    const r = await PR.api(`api/lists/${encodeURIComponent(name)}${qs()}`);
+    Object.assign(L, { content: r.content || "", count: r.count || 0, updated: r.updated, loaded: true, error: "",
+      shared: r.scope === "own" && personal() ? r.central_count || 0 : -1 });
   } catch (e) {
     L.error = e.message;
     PR.toast(e.message, true);
@@ -344,7 +360,7 @@ async function saveList(name) {
   L.error = "";
   PR.render();
   try {
-    await PR.api(`api/lists/${encodeURIComponent(name)}`, PR.json("PUT", { content: L.draft }));
+    await PR.api(`api/lists/${encodeURIComponent(name)}${qs()}`, PR.json("PUT", { content: L.draft }));
     L.editing = false;
     L.note = "";
     L.busy = false;
@@ -367,6 +383,7 @@ function listVals() {
     const items = hits.slice(0, LIST_SHOW).map((t) => ({ t, fg: t.startsWith("#") ? "#898781" : "#27272A" }));
     return {
       title: meta[0], desc: meta[1], count: L.loaded ? PR.num(L.count) : "…",
+      shared: L.loaded && L.shared >= 0 ? `+ รายการกลาง ${PR.num(L.shared)} รายการที่ผู้ดูแลระบบกำหนด ใช้ร่วมกันทุกครั้ง` : "",
       viewing: !L.editing, editing: !!L.editing, loading: !!L.loading && !L.loaded,
       items, more: hits.length > LIST_SHOW ? PR.num(hits.length - LIST_SHOW) : "",
       empty: !!L.loaded && !hits.length, emptyText: q ? `ไม่พบ “${L.q.trim()}”` : "ยังไม่มีรายการ",
@@ -512,6 +529,57 @@ function ruleVals() {
   };
 }
 
+/* ---------------------------------------------------------------- scope (mine / shared) */
+async function setScope(sc) {
+  if (S.scopeBusy || S.scope === sc) return;
+  S.scopeBusy = true;
+  PR.render();
+  try {
+    if (sc === "central") S.central = await PR.api("api/settings?scope=central");
+    S.scope = sc;
+    S.sel = null;
+    resetDraft();
+    S.sel = S.draft.def;
+    if (S.tab === "lists") for (const n of listNames()) loadList(n);
+  } catch (e) {
+    PR.toast(e.message, true);
+  }
+  S.scopeBusy = false;
+  PR.render();
+}
+
+async function useCentral() {
+  if (S.resetting) return;
+  S.resetting = true;
+  PR.render();
+  try {
+    applyMine(await PR.api("api/settings", { method: "DELETE" }));
+    resetDraft();
+    PR.toast("กลับไปใช้ค่ากลางแล้ว");
+  } catch (e) {
+    PR.toast(e.message, true);
+  }
+  S.resetting = false;
+  PR.render();
+}
+
+function scopeVals() {
+  const own = (cfg().settings || {})._own || [];
+  const seg = (id, label) => {
+    const on = S.scope === id;
+    return { label, on: String(on), bg: on ? "#FFFFFF" : "transparent", fg: on ? "#18181B" : "#52525B", w: on ? "600" : "500",
+      ring: on ? "0 0 0 1px #E4E4DF, 0 1px 2px rgba(0,0,0,.05)" : "none", pick: () => { setScope(id); return false; } };
+  };
+  return {
+    sharedOnly: !personal(), mineOnly: personal() && !canCentral(), scopeSwitch: canCentral(),
+    scopes: [seg("own", "ของฉัน"), seg("central", "ค่ากลาง · ทุกคน")], scopeBusy: S.scopeBusy,
+    isCentral: central(),
+    ownNote: personal() && !central() && own.length ? `คุณตั้งเอง ${own.length} เรื่อง เรื่องอื่นใช้ค่ากลาง` : "",
+    ownFree: personal() && !central() && !own.length,
+    resetDis: S.resetting ? "disabled" : "", useCentral: () => { useCentral(); return false; },
+  };
+}
+
 /* ---------------------------------------------------------------- view */
 function vals() {
   const tabs = TABS.map((t) => {
@@ -523,6 +591,7 @@ function vals() {
     tabs, crumb: (TABS.find((t) => t[0] === S.tab) || TABS[0])[1],
     isConn: S.tab === "conn", isLists: S.tab === "lists", isRules: S.tab === "rules",
   };
+  Object.assign(base, scopeVals());
   if (S.tab === "conn") return Object.assign(base, connVals());
   if (S.tab === "lists") return Object.assign(base, { lists: listVals() });
   return Object.assign(base, ruleVals());
@@ -533,6 +602,7 @@ PR.views.settings = {
   title: ([tab]) => (TABS.find((t) => t[0] === tab) || TABS[0])[1],
   enter([tab]) {
     S.tab = tab || "conn";
+    if (S.scope === "central" && !canCentral()) S.scope = "own";
     if (!S.draft || !isDirty()) resetDraft();
     if (S.tab === "conn") {
       if (!S.sel) S.sel = S.draft.def;

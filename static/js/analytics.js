@@ -22,7 +22,7 @@ const FP_WHY = {
 };
 const CRITICAL_DEFAULT = ["TH_ID_CARD", "SECRET", "CREDIT_CARD", "BANK_ACCOUNT", "PASSPORT"];
 
-const S = { tab: "analytics", days: 30, ext: "", model: "", stats: null, busy: false, error: "", seq: 0, board: null, boardBusy: false };
+const S = { tab: "analytics", days: 30, ext: "", model: "", mine: "0", stats: null, busy: false, error: "", seq: 0, board: null, boardBusy: false };
 const fmt = (n) => PR.num(Math.round(n || 0));
 const pct1 = (v) => (v == null ? "–" : `${(v * 100).toFixed(1)}%`);
 
@@ -32,7 +32,7 @@ async function loadStats() {
   S.error = "";
   PR.render();
   try {
-    const q = new URLSearchParams({ days: S.days, ext: S.ext, model: S.model });
+    const q = new URLSearchParams({ days: S.days, ext: S.ext, model: S.model, mine: S.mine });
     const r = await PR.api(`api/stats?${q}`);
     if (my !== S.seq) return;
     S.stats = r;
@@ -171,7 +171,9 @@ function filterVals() {
   const models = [...new Set([...(f.models || []), ...(S.model && S.model !== "none" ? [S.model] : [])])];
   const opt = (v, label, cur) => ({ v, label, sel: String(v) === String(cur) ? "selected" : "" });
   const set = (k) => (ev) => { S[k] = k === "days" ? Number(ev.target.value) : ev.target.value; loadStats(); return false; };
-  return [
+  // admins see everyone's numbers by default; everyone else only ever sees their own
+  const who = PR.signedIn() && PR.isAdmin() ? [{ aria: "ของใคร", set: set("mine"), opts: [opt("0", "ทุกคน", S.mine), opt("1", "เฉพาะของฉัน", S.mine)] }] : [];
+  return [...who,
     { aria: "ช่วงเวลา", set: set("days"), opts: [7, 30, 90, 365].map((d) => opt(d, d === 365 ? "1 ปีล่าสุด" : `${d} วันล่าสุด`, S.days)) },
     { aria: "ประเภทไฟล์", set: set("ext"), opts: [opt("", "ทุกประเภทไฟล์", S.ext), ...exts.map((e) => opt(e, PR.extLabel(e), S.ext))] },
     { aria: "Connector / model", set: set("model"), opts: [opt("", "ทุก connector", S.model), opt("none", "ไม่ใช้ AI", S.model), ...models.map((m) => opt(m, m, S.model))] },

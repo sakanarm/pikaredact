@@ -1,12 +1,16 @@
 <main class="mainp" style="flex: 1; min-width: 0; margin: 10px 10px 10px 0; background: #FFFFFF; border: 1px solid #E7E7E2; border-radius: 16px; overflow: hidden">
 <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-bottom: 1px solid #EFEFEA">
 <div style="font-size: 13.5px; color: #71717A">ตั้งค่า <span style="margin: 0 6px">/</span><span style="color: #18181B; font-weight: 500">{{crumb}}</span></div>
-<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B; background: #F6F6F3; border: 1px solid #ECECE7; padding: 6px 10px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>มีผลกับทุกคนที่ใช้เซิร์ฟเวอร์นี้</span>
+<sc-if value="{{sharedOnly}}"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B; background: #F6F6F3; border: 1px solid #ECECE7; padding: 6px 10px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>มีผลกับทุกคนที่ใช้เซิร์ฟเวอร์นี้</span></sc-if>
+<sc-if value="{{mineOnly}}"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B; background: #F6F6F3; border: 1px solid #ECECE7; padding: 6px 10px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>การตั้งค่าของคุณ · ที่ไม่ได้ตั้งใช้ค่ากลาง</span></sc-if>
+<sc-if value="{{scopeSwitch}}"><div role="radiogroup" aria-label="แก้การตั้งค่าของ" style="display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: #F1F1EE; border-radius: 10px"><sc-if value="{{scopeBusy}}"><span class="spin" aria-label="กำลังโหลด" style="margin: 0 6px"></span></sc-if><sc-for list="{{scopes}}" as="c"><button type="button" role="radio" aria-checked="{{c.on}}" onClick="{{c.pick}}" style="border: 0; background: {{c.bg}}; color: {{c.fg}}; font: inherit; font-size: 13px; font-weight: {{c.w}}; padding: 0 12px; min-height: 32px; border-radius: 8px; box-shadow: {{c.ring}}; cursor: pointer">{{c.label}}</button></sc-for></div></sc-if>
 </div>
 
 <div style="padding: 24px 28px 40px; max-width: 1180px">
 <h1 style="margin: 0; font-size: 28px; letter-spacing: -0.015em; font-weight: 650">ตั้งค่า</h1>
 <p style="margin: 6px 0 0; font-size: 14.5px; color: #52525B">เลือก AI ที่ใช้ตรวจ จัดการรายชื่อ และกำหนดว่าจะจับอะไรบ้าง</p>
+<sc-if value="{{isCentral}}"><div role="status" style="margin-top: 12px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid #FDE68A; background: #FFFBEB; color: #92400E; border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.6"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 3px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg><span>กำลังแก้<b>ค่ากลาง</b> — มีผลกับทุกคนในเรื่องที่เขาไม่ได้ตั้งเอง รวมถึง AI ที่ใช้ตรวจ</span></div></sc-if>
+<sc-if value="{{ownNote}}"><div style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: #3F3F46"><span>{{ownNote}}</span><button type="button" class="lnkbtn" onClick="{{useCentral}}" {{{resetDis}}} style="font-size: 13px">กลับไปใช้ค่ากลางทั้งหมด</button></div></sc-if>
 
 <div role="tablist" aria-label="หมวดการตั้งค่า" style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 22px; border-bottom: 1px solid #EFEFEA">
 <sc-for list="{{tabs}}" as="t">
@@ -110,7 +114,7 @@
 <sc-for list="{{lists}}" as="l">
 <section class="card" aria-label="{{l.title}}" style="overflow: hidden; display: flex; flex-direction: column">
 <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #EFEFEA">
-<div style="min-width: 0"><h2 style="margin: 0; font-size: 15px; font-weight: 600">{{l.title}}</h2><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">{{l.desc}}</div></div>
+<div style="min-width: 0"><h2 style="margin: 0; font-size: 15px; font-weight: 600">{{l.title}}</h2><div style="margin-top: 2px; font-size: 12.5px; color: #71717A">{{l.desc}}</div><sc-if value="{{l.shared}}"><div style="margin-top: 4px; font-size: 12px; color: #1E40AF">{{l.shared}}</div></sc-if></div>
 <span class="mono" style="flex: none; font-size: 12px; padding: 3px 7px; border-radius: 6px; background: #F1F1EE; color: #3F3F46">{{l.count}}</span>
 </div>
 <sc-if value="{{l.viewing}}">

@@ -1,0 +1,127 @@
+<main class="mainp" style="flex: 1; min-width: 0; margin: 10px 10px 10px 0; background: #FFFFFF; border: 1px solid #E7E7E2; border-radius: 16px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-bottom: 1px solid #EFEFEA">
+<div style="font-size: 13.5px; color: #71717A">ผู้ดูแลระบบ <span style="margin: 0 6px">/</span><span style="color: #18181B; font-weight: 500">ผู้ใช้งานและสิทธิ์</span></div>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #52525B; background: #F6F6F3; border: 1px solid #ECECE7; padding: 6px 10px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z"></path></svg>เห็นเฉพาะผู้ดูแลระบบ</span>
+</div>
+
+<div style="padding: 24px 28px 40px; max-width: 1180px">
+<h1 style="margin: 0; font-size: 28px; letter-spacing: -0.015em; font-weight: 650">ผู้ใช้งานและสิทธิ์</h1>
+<p style="margin: 6px 0 0; font-size: 14.5px; color: #52525B">ใครเข้าใช้ได้ บทบาทของแต่ละคน และวิธีเข้าสู่ระบบ · งาน รายชื่อ และการตั้งค่าของแต่ละคนแยกกัน</p>
+
+<sc-if value="{{loading}}"><div style="margin-top: 28px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: #52525B"><span class="spin" aria-hidden="true"></span>กำลังโหลดรายชื่อผู้ใช้…</div></sc-if>
+<sc-if value="{{error}}"><div role="alert" style="margin-top: 20px; border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; border-radius: 12px; padding: 12px 14px; font-size: 13.5px">{{error}}</div></sc-if>
+
+<sc-if value="{{ready}}">
+<div style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+<section class="card" aria-labelledby="ad-methods" style="flex: 1 1 320px; min-width: 0; padding: 16px 18px">
+<h2 id="ad-methods" style="margin: 0; font-size: 15px; font-weight: 600">วิธีเข้าสู่ระบบ</h2>
+<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="flex: none; width: 34px; height: 34px; border-radius: 9px; background: #F4F4F1; display: inline-flex; align-items: center; justify-content: center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3F3F46" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 14px; font-weight: 500">ชื่อผู้ใช้และรหัสผ่าน</span><span style="display: block; font-size: 12.5px; color: #71717A">ผู้ดูแลระบบสร้างบัญชีและตั้งรหัสผ่านให้</span></span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: {{pwFg}}; white-space: nowrap"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 99px; background: {{pwDot}}"></span>{{pwState}}</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="flex: none; width: 34px; height: 34px; border-radius: 9px; background: #F4F4F1; display: inline-flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 23 23"><path fill="#F25022" d="M1 1h10v10H1z"></path><path fill="#7FBA00" d="M12 1h10v10H12z"></path><path fill="#00A4EF" d="M1 12h10v10H1z"></path><path fill="#FFB900" d="M12 12h10v10H12z"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 14px; font-weight: 500">บัญชี Microsoft (Keycloak)</span><span style="display: block; font-size: 12.5px; color: #71717A">ตั้งค่าใน .env ของเซิร์ฟเวอร์ <span class="mono" style="color: #3F3F46">KEYCLOAK_*</span></span></span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: {{ssoFg}}; white-space: nowrap"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 99px; background: {{ssoDot}}"></span>{{ssoState}}</span>
+</div>
+</div>
+</section>
+
+<section class="card" aria-labelledby="ad-policy" style="flex: 1 1 320px; min-width: 0; padding: 16px 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px"><h2 id="ad-policy" style="margin: 0; font-size: 15px; font-weight: 600">คนที่เข้าด้วย Microsoft ครั้งแรก</h2><sc-if value="{{polNote}}"><span style="font-size: 12px; color: #92400E">{{polNote}}</span></sc-if></div>
+<div role="radiogroup" aria-labelledby="ad-policy" style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{pol}}" as="o">
+<button type="button" role="radio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="text-align: left; display: flex; align-items: center; gap: 12px; border: 1px solid {{o.border}}; background: #FFFFFF; border-radius: 10px; padding: 10px 12px; cursor: pointer; min-height: 48px; font: inherit; color: inherit">
+<span aria-hidden="true" style="flex: none; width: 16px; height: 16px; border-radius: 99px; border: 1.5px solid {{o.ringC}}; display: inline-flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 99px; background: {{o.dot}}"></span></span>
+<span><span style="display: block; font-size: 14px; font-weight: 500">{{o.label}}</span><span style="display: block; font-size: 12.5px; color: #71717A">{{o.desc}}</span></span>
+</button>
+</sc-for>
+</div>
+</section>
+</div>
+
+<section class="card" aria-labelledby="ad-users" style="margin-top: 16px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA">
+<div><h2 id="ad-users" style="margin: 0; font-size: 15px; font-weight: 600">ผู้ใช้ทั้งหมด <span style="font-weight: 500; color: #71717A">{{total}}</span></h2><sc-if value="{{pendingNote}}"><div style="margin-top: 2px; font-size: 12.5px; color: #92400E">{{pendingNote}}</div></sc-if></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<label style="display: flex; align-items: center; gap: 8px; border: 1px solid #E4E4DF; border-radius: 10px; padding: 0 10px; min-height: 38px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717A" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input id="ad-q" type="search" value="{{q}}" onInput="{{onQ}}" placeholder="ค้นหาชื่อหรืออีเมล" aria-label="ค้นหาผู้ใช้" style="width: 180px; border: 0; outline: 0; font: inherit; font-size: 13px; background: transparent; min-height: 34px"></label>
+<sc-if value="{{addClosed}}"><button type="button" onClick="{{openAdd}}" style="display: inline-flex; align-items: center; gap: 6px; border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 0 14px; min-height: 38px; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>เพิ่มผู้ใช้</button></sc-if>
+</div>
+</div>
+
+<sc-if value="{{addOpen}}">
+<div style="padding: 16px 18px; background: #FAFAF8; border-bottom: 1px solid #EFEFEA">
+<div style="font-size: 14px; font-weight: 600">เพิ่มผู้ใช้</div>
+<div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start">
+<label style="flex: 1 1 200px; min-width: 0; font-size: 12.5px; color: #52525B">ชื่อผู้ใช้หรืออีเมล<input id="add-login" class="inp" value="{{fEmail}}" onInput="{{onEmail}}" onKeydown="{{onKey}}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="เช่น somchai หรือ somchai@company.com" style="display: block; width: 100%; margin-top: 4px"></label>
+<label style="flex: 1 1 180px; min-width: 0; font-size: 12.5px; color: #52525B">ชื่อที่แสดง<input class="inp" value="{{fName}}" onInput="{{onName}}" onKeydown="{{onKey}}" autocomplete="off" placeholder="ไม่บังคับ" style="display: block; width: 100%; margin-top: 4px"></label>
+<label style="flex: 0 1 150px; font-size: 12.5px; color: #52525B">บทบาท<select class="sel" onChange="{{onRole}}" style="display: block; width: 100%; margin-top: 4px; min-height: 40px; font-size: 14px; border-radius: 10px"><sc-for list="{{fRoles}}" as="r"><option value="{{r.v}}" {{{r.sel}}}>{{r.label}}</option></sc-for></select></label>
+<label style="flex: 1 1 200px; min-width: 0; font-size: 12.5px; color: #52525B">รหัสผ่านเริ่มต้น<input class="inp" type="text" value="{{fPw}}" onInput="{{onPw}}" onKeydown="{{onKey}}" autocomplete="new-password" spellcheck="false" style="display: block; width: 100%; margin-top: 4px"></label>
+</div>
+<div style="margin-top: 6px; font-size: 12px; color: #71717A">{{pwHint}}</div>
+<sc-if value="{{fErr}}"><div role="alert" style="margin-top: 8px; font-size: 13px; color: #B91C1C">{{fErr}}</div></sc-if>
+<div style="margin-top: 12px; display: flex; gap: 8px">
+<button type="button" onClick="{{submit}}" {{{fBusy}}} style="border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 0 16px; min-height: 40px; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer">{{fLabel}}</button>
+<button type="button" class="ghost" onClick="{{closeAdd}}" style="border: 1px solid #E4E4DF; background: #FFFFFF; color: #18181B; border-radius: 10px; padding: 0 14px; min-height: 40px; font: inherit; font-size: 13.5px; cursor: pointer">ยกเลิก</button>
+</div>
+</div>
+</sc-if>
+
+<ul style="list-style: none; margin: 0; padding: 0">
+<sc-for list="{{users}}" as="u">
+<li style="border-bottom: 1px solid #F2F2EE">
+<div class="row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 18px">
+<span aria-hidden="true" style="flex: none; width: 36px; height: 36px; border-radius: 99px; background: #F1F1EE; color: #3F3F46; display: inline-flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600">{{u.init}}</span>
+<span style="flex: 1 1 220px; min-width: 0">
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; font-weight: 500">{{u.name}}<sc-if value="{{u.self}}"><span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #F1F1EE; color: #3F3F46">คุณ</span></sc-if><sc-if value="{{u.locked}}"><span title="กำหนดใน PIKA_ADMIN_EMAILS ของเซิร์ฟเวอร์" style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #F1F1EE; color: #3F3F46">กำหนดใน .env</span></sc-if></span>
+<span class="mono" style="display: block; margin-top: 1px; font-size: 12.5px; color: #71717A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{u.login}}</span>
+</span>
+<span style="flex: 0 1 170px; font-size: 12.5px; color: #71717A; line-height: 1.5"><span style="display: block">{{u.seen}}</span><span style="display: flex; gap: 4px; margin-top: 2px"><sc-if value="{{u.pwTag}}"><span style="font-size: 11px; padding: 0 6px; border-radius: 5px; border: 1px solid #E4E4DF; color: #52525B">รหัสผ่าน</span></sc-if><sc-if value="{{u.ssoTag}}"><span style="font-size: 11px; padding: 0 6px; border-radius: 5px; border: 1px solid #E4E4DF; color: #52525B">Microsoft</span></sc-if></span></span>
+<span style="flex: none; display: flex; align-items: center; gap: 8px; margin-left: auto">
+<sc-if value="{{u.busy}}"><span class="spin" aria-label="กำลังบันทึก"></span></sc-if>
+<sc-if value="{{u.pending}}"><button type="button" onClick="{{u.approve}}" {{{u.dis}}} style="border: 0; background: #18181B; color: #FFFFFF; border-radius: 8px; padding: 0 12px; min-height: 34px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">อนุมัติ</button></sc-if>
+<sc-if value="{{u.fixed}}"><span style="font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 99px; background: {{u.chip.bg}}; color: {{u.chip.fg}}">{{u.chip.label}}</span></sc-if>
+<sc-if value="{{u.editable}}"><select class="sel" aria-label="บทบาทของ {{u.login}}" onChange="{{u.setRole}}" {{{u.dis}}} style="width: 140px"><sc-for list="{{u.opts}}" as="o"><option value="{{o.v}}" {{{o.sel}}}>{{o.label}}</option></sc-for></select>
+<button type="button" class="ghost" onClick="{{u.openReset}}" title="ตั้งรหัสผ่านใหม่" aria-label="ตั้งรหัสผ่านใหม่ให้ {{u.login}}" style="width: 34px; height: 34px; border: 1px solid #E4E4DF; background: #FFFFFF; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #3F3F46"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="m10.8 12.2 9.2-9.2M17 6l3 3M14 9l2 2"></path></svg></button>
+<button type="button" class="ghost" onClick="{{u.openDel}}" title="ลบผู้ใช้" aria-label="ลบ {{u.login}}" style="width: 34px; height: 34px; border: 1px solid #E4E4DF; background: #FFFFFF; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #B91C1C"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button></sc-if>
+</span>
+</div>
+<sc-if value="{{u.resetting}}">
+<div style="margin: 0 18px 12px; padding: 12px 14px; border: 1px solid #E7E7E2; border-radius: 10px; background: #FAFAF8">
+<label for="{{u.resetId}}" style="display: block; font-size: 12.5px; color: #52525B">รหัสผ่านใหม่ของ {{u.login}} · ผู้ใช้จะถูกออกจากระบบทุกเครื่อง</label>
+<div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px">
+<input id="{{u.resetId}}" class="inp" type="{{u.rpwType}}" value="{{u.rpw}}" onInput="{{u.onRpw}}" onKeydown="{{u.rpwKey}}" autocomplete="new-password" spellcheck="false" style="flex: 1 1 220px; min-width: 0">
+<button type="button" class="ghost" onClick="{{u.toggleShow}}" style="border: 1px solid #E4E4DF; background: #FFFFFF; border-radius: 10px; padding: 0 12px; min-height: 40px; font: inherit; font-size: 13px; cursor: pointer">แสดง/ซ่อน</button>
+<button type="button" onClick="{{u.saveReset}}" {{{u.rpwBusy}}} style="border: 0; background: #18181B; color: #FFFFFF; border-radius: 10px; padding: 0 14px; min-height: 40px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">ตั้งรหัสผ่าน</button>
+<button type="button" class="lnkbtn" onClick="{{u.cancel}}" style="padding: 0 6px; font-size: 13px">ยกเลิก</button>
+</div>
+<sc-if value="{{u.rpwErr}}"><div role="alert" style="margin-top: 6px; font-size: 12.5px; color: #B91C1C">{{u.rpwErr}}</div></sc-if>
+</div>
+</sc-if>
+<sc-if value="{{u.deleting}}">
+<div role="alertdialog" aria-label="ยืนยันการลบ" style="margin: 0 18px 12px; padding: 12px 14px; border: 1px solid #FECACA; border-radius: 10px; background: #FEF2F2; display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<span style="flex: 1 1 260px; font-size: 13px; color: #991B1B; line-height: 1.6">ลบ <b>{{u.login}}</b>? งานที่ค้างอยู่ รายชื่อส่วนตัว และการตั้งค่าของคนนี้จะถูกลบด้วย ถ้าต้องการแค่หยุดใช้ชั่วคราว ให้เปลี่ยนบทบาทเป็น “ระงับการใช้งาน”</span>
+<button type="button" onClick="{{u.confirmDel}}" style="border: 0; background: #B91C1C; color: #FFFFFF; border-radius: 10px; padding: 0 14px; min-height: 38px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">ลบผู้ใช้</button>
+<button type="button" class="lnkbtn" onClick="{{u.cancel}}" style="padding: 0 6px; font-size: 13px">ยกเลิก</button>
+</div>
+</sc-if>
+</li>
+</sc-for>
+</ul>
+<sc-if value="{{empty}}"><div style="padding: 28px 18px; text-align: center; font-size: 13.5px; color: #71717A">{{emptyText}}</div></sc-if>
+</section>
+
+<section aria-labelledby="ad-roles" style="margin-top: 16px; border: 1px dashed #D4D4CF; border-radius: 12px; padding: 14px 16px">
+<h2 id="ad-roles" style="margin: 0; font-size: 13.5px; font-weight: 600">บทบาทในระบบ</h2>
+<dl style="margin: 8px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 13px; line-height: 1.6; color: #3F3F46">
+<dt><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: #18181B; color: #FDE047">ผู้ดูแลระบบ</span></dt><dd style="margin: 0">ใช้งานได้ทุกอย่าง จัดการผู้ใช้ แก้ค่ากลางและรายชื่อกลางที่ทุกคนใช้ ดูสถิติของทุกคน</dd>
+<dt><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: #DBEAFE; color: #1E40AF">ผู้ใช้งาน</span></dt><dd style="margin: 0">ตรวจและปิดบังเอกสาร ตั้งค่าและรายชื่อของตัวเองได้ (ที่ไม่ได้ตั้งจะใช้ค่ากลาง รวมถึง AI) เห็นเฉพาะงานและสถิติของตัวเอง</dd>
+<dt><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: #FEF3C7; color: #92400E">รออนุมัติ</span></dt><dd style="margin: 0">เข้าสู่ระบบได้แต่ยังใช้งานไม่ได้ จนกว่าผู้ดูแลระบบจะอนุมัติ</dd>
+<dt><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: #FEE2E2; color: #991B1B">ระงับการใช้งาน</span></dt><dd style="margin: 0">เข้าใช้ไม่ได้ ข้อมูลยังเก็บไว้ เปลี่ยนกลับเป็นผู้ใช้งานได้ทุกเมื่อ</dd>
+</dl>
+</section>
+</sc-if>
+</div>
+</main>
