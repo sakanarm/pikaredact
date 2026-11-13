@@ -29,6 +29,8 @@ function stateFor(id) {
       replaced: {}, pvKey: "", pvWant: "", pvTimer: 0, pvSeq: 0, pvLoading: false,
       pop: null, popFocus: false, expanded: new Set(), docNode: null, docVer: 0, builtVer: -1,
       exporting: false, exportError: "",
+      layout: "text", pg: { src: null, srcItems: "", srcBusy: false, srcErr: "", out: null, outKey: "", outWant: "", outBusy: false,
+        outErr: "", outSeq: 0, outTimer: 0 }, pageNode: null, pageVer: 0, pageBuilt: -1,
     };
   }
   return PR.review[id];
@@ -60,6 +62,7 @@ function load(st, j) {
   st.findings = j.findings || [];
   for (const f of st.findings) if (!(f.id in st.on)) st.on[f.id] = f.accepted !== false;
   st.loaded = true;
+  st.layout = j.page_view ? "page" : "text";
   st.docVer++;
   PR.hist.put(st.id, { name: j.filename, ext: j.ext, kind: j.kind, created: j.created, expires: j.expires, pii: st.findings.length });
 }
@@ -214,6 +217,12 @@ function segHTML(st, seg, bySeg) {
   return `<span class="tx" data-seg="${esc(seg.id)}">${h + esc(t.slice(pos))}</span>`;
 }
 
+function colName(n) {   // 1 -> A, 27 -> AA
+  let s = "";
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s || "A";
+}
+
 function sectionsOf(st) {
   const secs = [];
   let cur = null;
@@ -286,9 +295,33 @@ function buildDoc(st) {
       }
       const t = tables[b.table];
       const rows = Object.keys(t.rows).map(Number).sort((x, y) => x - y);
-      const cols = [...t.cols].sort((x, y) => x - y);
+      let cols = [...t.cols].sort((x, y) => x - y);
       tableRows = Math.max(tableRows, rows.length);
       const cut = (big || rows.length > TABLE_MAX) && !st.expanded.has(i);
+      if (b.table.startsWith("xlsx:")) {
+        // spreadsheet: draw it like Excel — column letters, row numbers, empty columns kept in place
+        const base = b.table === "xlsx:csv" ? 1 : 0;   // csv rows/cols are 0-based, xlsx refs are 1-based
+        const lo = cols[0], hi = cols[cols.length - 1];
+        if (hi - lo < 60) cols = Array.from({ length: hi - lo + 1 }, (_, k) => lo + k);
+        let tr = "", prev = null;
+        rows.forEach((r, ri) => {
+          const row = t.rows[r];
+          const hit = cols.some((c) => (row[c] || []).some((seg) => bySeg[seg.id]));
+          if (cut && ri > 0 && !hit) { hidden++; return; }
+          const gap = prev != null && r !== prev + 1 ? " class=\"xgap\"" : "";
+          prev = r;
+          tr += `<tr${gap}><th class="xr" scope="row">${r + base}</th>${cols.map((c) => {
+            const segs = row[c] || [];
+            const num = segs.length && segs.every((seg) => /^[\s\d.,%()+\-]+$/.test(seg.text || ""));
+            const long = segs.some((seg) => (seg.text || "").length > 40);
+            const cls = [num && "num", long && "wrap"].filter(Boolean).join(" ");
+            return `<td${cls ? ` class="${cls}"` : ""}>${segs.map((seg) => segHTML(st, seg, bySeg)).join("\n")}</td>`;
+          }).join("")}</tr>`;
+        });
+        const sheet = b.table === "xlsx:csv" ? ((st.job && st.job.filename) || "CSV") : sec.group.replace(/^ชีต\s*/, "");
+        body += `<div class="xl-tab">${esc(sheet)}</div><div class="xl-wrap"><table class="xl"><thead><tr><th class="xr"></th>${cols.map((c) => `<th scope="col">${colName(c + base)}</th>`).join("")}</tr></thead><tbody>${tr}</tbody></table></div>`;
+        continue;
+      }
       let th = "", tb = "";
       rows.forEach((r, ri) => {
         const row = t.rows[r];
@@ -304,7 +337,8 @@ function buildDoc(st) {
     if (hidden) body += `<button type="button" class="doc-more" data-sec="${i}">แสดงส่วนที่ไม่มีข้อมูลส่วนบุคคลอีก ${PR.num(hidden)} ส่วน</button>`;
     else if (canFold && st.expanded.has(i)) body += `<button type="button" class="doc-more" data-sec="${i}">ย่อเหลือเฉพาะส่วนที่พบข้อมูล</button>`;
     if (!body) body = `<p class="doc-p" style="color:#A1A1AA">(ไม่มีข้อความ)</p>`;
-    html += `<section class="doc-sec" data-sec="${i}" style="margin-top:${i ? 26 : 0}px"><h3>${esc(head)}</h3>${body}</section>`;
+    const sheetOnly = blocks.length && blocks.every((x) => x.table && x.table.startsWith("xlsx:"));   // the sheet tab already names it
+    html += `<section class="doc-sec" data-sec="${i}" style="margin-top:${i ? 26 : 0}px">${sheetOnly ? "" : `<h3>${esc(head)}</h3>`}${body}</section>`;
   });
   node.innerHTML = html || `<p class="doc-p" style="color:#71717A">ไม่พบข้อความในไฟล์นี้</p>`;
   st.firstOfGroup = firstOfGroup;
@@ -357,6 +391,21 @@ function toggleItem(st, id) {
 }
 
 function locate(st, f) {
+  if (usePages(st) && !(st.view === "preview" && st.output) && st.pageNode) {
+    const b = st.pageNode.querySelector(`.pbox[data-ids~="${CSS.escape(f.id)}"]`);
+    if (b) {
+      b.scrollIntoView({ behavior: "smooth", block: "center" });
+      b.classList.remove("flash");
+      void b.offsetWidth;
+      b.classList.add("flash");
+      b.focus({ preventScroll: true });
+      return;
+    }
+    st.layout = "text";   // not on a page (comment, note, metadata...): show it in the text view
+    PR.render();
+    setTimeout(() => locate(st, f), 60);
+    return;
+  }
   if (!st.docNode) return;
   const el = st.docNode.querySelector(`[data-f="${CSS.escape(f.id)}"]`);
   if (!el) return;
@@ -396,6 +445,165 @@ function schedulePreview(st) {
     st.pvLoading = false;
     if (S === st) PR.render();
   }, 150);
+}
+
+/* ---------------------------------------------------------------- page view (Word / PowerPoint / PDF as printed) */
+const OFF_PAGE = new Set(["comment", "note", "metadata", "hidden", "deleted", "field", "link", "chart"]);
+const PAGE_PX = 1400;
+const usePages = (st) => st.layout === "page" && !!(st.job && st.job.page_view);
+const pageSig = (st) => {
+  const out = st.view === "preview" && st.output;
+  return [st.pageVer, out || "src", out ? !!st.pg.out : !!st.pg.src, out ? st.pg.outErr : st.pg.srcErr, (out ? st.pg.out : st.pg.src) ? "" : (out ? st.pg.outBusy : st.pg.srcBusy)].join("|");
+};
+
+function boxItems(st) {
+  const byText = new Map();
+  for (const f of items(st)) {
+    const s = st.segById[f.seg_id];
+    if (s && OFF_PAGE.has(s.kind)) continue;
+    const t = String(f.text).replace(/\s+/g, " ").trim();
+    if (!byText.has(t)) byText.set(t, []);
+    byText.get(t).push(f.id);
+  }
+  return [...byText].map(([text, ids]) => ({ text, ids }));
+}
+
+async function loadSourcePages(st) {
+  const list = boxItems(st);
+  const key = JSON.stringify(list);
+  if (st.pg.srcBusy || key === st.pg.srcItems) return;
+  st.pg.srcBusy = true;
+  st.pg.srcErr = "";
+  if (S === st) PR.render();
+  try {
+    const r = await PR.api(`api/jobs/${st.id}/pages`, PR.json("POST", { what: "source", items: list }));
+    st.pg.src = r;
+    st.pg.srcItems = key;
+    st.pageVer++;
+  } catch (e) {
+    st.pg.srcErr = e.message;
+    st.pg.srcItems = key;   // don't retry in a loop; switching back to this view retries
+  }
+  st.pg.srcBusy = false;
+  if (S === st) PR.render();
+}
+
+function scheduleOutPages(st) {
+  const opts = (st.job && st.job.options) || {};
+  const body = Object.assign({ what: st.output, sanitize: opts.sanitize !== false }, payload(st));
+  const key = JSON.stringify(body);
+  if (key === st.pg.outKey || key === st.pg.outWant) return;
+  st.pg.outWant = key;
+  clearTimeout(st.pg.outTimer);
+  st.pg.outTimer = setTimeout(async () => {
+    const seq = ++st.pg.outSeq;
+    st.pg.outBusy = true;
+    st.pg.outErr = "";
+    if (S === st) PR.render();
+    try {
+      const r = await PR.api(`api/jobs/${st.id}/pages`, PR.json("POST", body));
+      if (seq !== st.pg.outSeq) return;
+      st.pg.out = r;
+      st.pg.outKey = key;
+      st.pageVer++;
+    } catch (e) {
+      if (seq !== st.pg.outSeq) return;
+      st.pg.outErr = e.message;
+      st.pg.outWant = "";
+    }
+    st.pg.outBusy = false;
+    if (S === st) PR.render();
+  }, 500);
+}
+
+function pagesWanted(st) {
+  if (!usePages(st)) return;
+  if (st.view === "preview" && st.output) scheduleOutPages(st);
+  else loadSourcePages(st);
+}
+
+function buildPages(st) {
+  const node = st.pageNode || document.createElement("div");
+  if (!st.pageNode) {
+    node.className = "pgv";
+    const hit = (ev) => {
+      const b = ev.target.closest(".pbox");
+      if (!b) return;
+      const ids = b.dataset.ids.split(" ").filter((id) => id in st.on);
+      const v = !ids.some((id) => st.on[id]);
+      ids.forEach((id) => { st.on[id] = v; });
+      PR.render();
+    };
+    node.addEventListener("click", hit);
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { if (ev.target.closest(".pbox")) { ev.preventDefault(); hit(ev); } } });
+    st.pageNode = node;
+  }
+  const out = st.view === "preview" && st.output;
+  const d = out ? st.pg.out : st.pg.src;
+  const busy = out ? st.pg.outBusy : st.pg.srcBusy;
+  const err = out ? st.pg.outErr : st.pg.srcErr;
+  if (!d) {
+    node.innerHTML = err ? `<p class="pgv-msg">${esc(err)}</p>`
+      : `<p class="pgv-msg"><span class="spin" aria-hidden="true"></span> ${busy ? "กำลังจัดหน้าเอกสาร…" : ""}</p>`;
+    st.pageBuilt = pageSig(st);
+    return;
+  }
+  const byPage = {};
+  if (!out) for (const b of d.boxes || []) (byPage[b[0]] = byPage[b[0]] || []).push(b);
+  let html = "";
+  d.pages.forEach((p, i) => {
+    const boxes = (byPage[i] || []).map(([, x0, y0, x1, y1, ids]) => {
+      const l = ((x0 - 1) / p.w) * 100, t = ((y0 - 1) / p.h) * 100, w = ((x1 - x0 + 2) / p.w) * 100, h = ((y1 - y0 + 2) / p.h) * 100;
+      const pos = `left:${l.toFixed(3)}%;top:${t.toFixed(3)}%;width:${w.toFixed(3)}%;height:${h.toFixed(3)}%;`;
+      return `<span class="pbox" role="button" tabindex="0" data-ids="${esc(ids.join(" "))}" data-pos="${pos}" style="${pos}"></span>`;
+    }).join("");
+    html += `<div class="pg" data-page="${i}" style="aspect-ratio:${p.w}/${p.h}"><img loading="${i < 2 ? "eager" : "lazy"}" decoding="async" alt="หน้า ${i + 1}" `
+      + `src="api/jobs/${esc(st.id)}/pages/${esc(d.key)}/${i}.png?w=${PAGE_PX}">${boxes}<span class="pg-no">${i + 1} / ${d.total}</span></div>`;
+  });
+  if (d.total > d.pages.length) html += `<p class="pgv-msg">แสดง ${d.pages.length} หน้าแรกจาก ${PR.num(d.total)} หน้า · หน้าที่เหลือดูได้ในมุมมองข้อความ</p>`;
+  node.innerHTML = html;
+  node.classList.toggle("dim", !!busy);
+  st.pageBuilt = pageSig(st);
+}
+
+function paintBoxes(st) {
+  const node = st.pageNode;
+  if (!node) return;
+  node.classList.toggle("dim", !!(st.view === "preview" && st.output ? st.pg.outBusy : false));
+  const byId = {};
+  for (const f of items(st)) byId[f.id] = f;
+  node.querySelectorAll(".pbox").forEach((el) => {
+    const fs = el.dataset.ids.split(" ").map((id) => byId[id]).filter(Boolean);
+    if (!fs.length) { el.style.display = "none"; return; }
+    const f = fs[0], t = PR.type(f.entity_type);
+    const on = fs.some((x) => st.on[x.id]);
+    const dim = st.typeFilter && st.typeFilter !== f.entity_type ? "opacity:.25;" : "";
+    const css = (on
+      ? `background:${t.bg};box-shadow:0 0 0 1.5px ${t.line}${fs.every((x) => isReview(x)) ? ";outline:1.5px dashed #F59E0B;outline-offset:2px" : ""}`
+      : "background:transparent;outline:1.5px dashed #A1A1AA;outline-offset:0") + ";" + dim;
+    if (el.__css !== css) { el.style.cssText = el.dataset.pos + css; el.__css = css; }
+    el.title = `${t.label} · ${f.text}${fs.length > 1 ? ` · ${fs.length} จุด` : ""} · ${on ? "เลือกอยู่" : "ไม่ได้เลือก"} — คลิกเพื่อสลับ`;
+    el.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+function pageNote(st) {
+  if (!usePages(st)) return "";
+  if (st.view === "preview" && st.output) {
+    return `หน้าตาไฟล์${st.output === "highlight" ? "ไฮไลต์" : `ที่ปิดบังแบบ${PR.modeLabel(st.mode)}`}จริง สร้างจากไฟล์ผลลัพธ์${st.pg.outBusy ? " · กำลังอัปเดต…" : ""}`;
+  }
+  const located = new Set();
+  for (const b of (st.pg.src && st.pg.src.boxes) || []) b[5].forEach((id) => located.add(id));
+  let off = 0, lost = 0;
+  for (const f of items(st)) {
+    const s = st.segById[f.seg_id];
+    if (s && OFF_PAGE.has(s.kind)) off++;
+    else if (st.pg.src && !located.has(f.id)) lost++;
+  }
+  const bits = ["คลิกกรอบเพื่อเลือก/ยกเลิก · ลากคลุมเพื่อเพิ่มจุดที่ตกหล่นได้ในมุมมอง “ข้อความ”"];
+  if (off) bits.push(`${PR.num(off)} จุดอยู่ในคอมเมนต์ โน้ต ส่วนที่ซ่อน หรือข้อมูลไฟล์ ซึ่งไม่แสดงบนหน้า`);
+  if (lost) bits.push(`${PR.num(lost)} จุดหาตำแหน่งบนหน้าไม่เจอ (ยังอยู่ในรายการด้านขวา)`);
+  return bits.join(" · ");
 }
 
 /* ---------------------------------------------------------------- export */
@@ -569,13 +777,18 @@ function vals() {
     showNote: secrets > 0 || warnings.length > 0, hasSecret: secrets > 0, warnings,
     bannerHead: out === "highlight" ? "ไฟล์ไฮไลต์ยังมีข้อมูลจริงทุกจุด" : `พบรหัสผ่าน ${secrets} จุด`,
     bannerBody: out === "highlight" ? `รวมรหัสผ่าน ${secrets} จุด ห้ามส่งออกนอกทีม` : "ลบทิ้งเสมอในทุกโหมด และไม่ถูกบันทึกในไฟล์กุญแจ",
-    parts,
+    parts: usePages(st) ? [] : parts,
+    pageOk: !!j.page_view, pageNote: pageNote(st),
+    layouts: [["page", j.kind === "pptx" ? "สไลด์" : "หน้าเอกสาร"], ["text", "ข้อความ"]].map(([k, label]) => {
+      const on = st.layout === k, c = on ? segOn : segOff;
+      return { label, on: String(on), bg: c.bg, fg: c.fg, sh: c.sh, pick: () => { st.layout = k; st.pop = null; } };
+    }),
     isSource: String(!preview), isPreview: String(preview),
     srcBg: sv.bg, srcFg: sv.fg, srcSh: sv.sh, pvBg: pv.bg, pvFg: pv.fg, pvSh: pv.sh,
     pvDis: out ? "" : "disabled", pvTip: out ? "" : "เลือกผลลัพธ์ด้านบนก่อน",
     viewSource: () => { st.view = "source"; },
     viewPreview: () => { if (!out) return false; st.view = "preview"; st.pop = null; },
-    previewNote: preview ? (out === "highlight"
+    previewNote: preview && !usePages(st) ? (out === "highlight"
       ? "ตัวอย่างไฟล์ไฮไลต์ · สีเหลือง = จุดที่เลือก · กลับไปที่ “ต้นฉบับ” เพื่อเพิ่มรายการเอง"
       : `ตัวอย่างหลังปิดบังแบบ${PR.modeLabel(st.mode)}${st.pvLoading ? " · กำลังโหลด…" : ""} · กลับไปที่ “ต้นฉบับ” เพื่อเพิ่มรายการเอง`) : "",
     pop: p && {
@@ -621,7 +834,7 @@ PR.views.review = {
     poll(S);
   },
   leave() {
-    if (S) { clearTimeout(S.timer); clearTimeout(S.pvTimer); }
+    if (S) { clearTimeout(S.timer); clearTimeout(S.pvTimer); clearTimeout(S.pg.outTimer); }
     if (keyHandler) window.removeEventListener("keydown", keyHandler);
     keyHandler = null;
   },
@@ -629,6 +842,10 @@ PR.views.review = {
   slots: {
     doc: () => {
       if (!S || !S.loaded) return null;
+      if (usePages(S)) {
+        if (!S.pageNode || S.pageBuilt !== pageSig(S)) buildPages(S);
+        return S.pageNode;
+      }
       if (!S.docNode || S.builtVer !== S.docVer) buildDoc(S);
       return S.docNode;
     },
@@ -638,6 +855,15 @@ PR.views.review = {
     if (!st || !st.loaded) return;
     const slot = root.querySelector('[data-slot="doc"]');
     if (!slot) return;
+    if (usePages(st)) {
+      pagesWanted(st);
+      if (!st.pageNode || st.pageBuilt !== pageSig(st)) buildPages(st);
+      if (slot.firstChild !== st.pageNode) slot.replaceChildren(st.pageNode);
+      slot.classList.add("pg-slot");
+      paintBoxes(st);
+      return;
+    }
+    slot.classList.remove("pg-slot");
     if (!st.docNode || st.builtVer !== st.docVer) buildDoc(st);
     if (slot.firstChild !== st.docNode) slot.replaceChildren(st.docNode);
     paintMarks(st);

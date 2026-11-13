@@ -63,3 +63,29 @@ button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible,
 .toast.bad{background:#991B1B}
 
 @media (prefers-reduced-motion:reduce){.spin,.bar.indet>span,.pii.flash{animation:none}}
+
+/* page view: Word / PowerPoint / PDF drawn as printed, with clickable boxes over findings */
+.pg-slot{padding:0 !important;background:#E9E9E5}
+.pgv{padding:20px 16px 28px;display:flex;flex-direction:column;align-items:center;gap:18px;transition:opacity .2s}
+.pgv.dim{opacity:.55}
+.pg{position:relative;width:100%;max-width:880px;background:#FFFFFF;box-shadow:0 1px 3px rgba(0,0,0,.12),0 6px 18px -8px rgba(0,0,0,.18)}
+.pg img{position:absolute;inset:0;width:100%;height:100%;display:block;user-select:none}
+.pg-no{position:absolute;right:8px;bottom:-17px;font-size:11px;color:#71717A}
+.pbox{position:absolute;border-radius:2px;mix-blend-mode:multiply;cursor:pointer}
+.pbox:hover{filter:brightness(.92)}
+.pbox:focus-visible{outline:2px solid #2563EB !important;outline-offset:2px}
+.pbox.flash{animation:flash 1.2s ease-out}
+.pgv-msg{margin:30px 0;font-size:13.5px;color:#52525B;text-align:center;line-height:1.7}
+
+/* spreadsheet view: Excel-style grid with column letters, row numbers and sheet tabs */
+.xl-tab{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;padding:4px 12px;border-bottom:2px solid #217346;color:#185C37;font-size:12.5px;font-weight:600;background:#F3F8F5;border-radius:6px 6px 0 0}
+.xl-wrap{overflow:auto;max-height:72vh;border:1px solid #D9D9D4;border-radius:4px;margin:0 0 16px;background:#FFFFFF}
+.xl{border-collapse:separate;border-spacing:0;font-size:13px;line-height:1.55;font-family:Calibri,"Segoe UI","Noto Sans Thai",sans-serif;color:#18181B}
+.xl th,.xl td{border-right:1px solid #E3E3DE;border-bottom:1px solid #E3E3DE;padding:3px 8px;text-align:left;vertical-align:top;white-space:nowrap;min-width:72px}
+.xl td.wrap{white-space:pre-wrap;overflow-wrap:anywhere;min-width:260px;max-width:420px}
+.xl thead th{position:sticky;top:0;z-index:1;background:#F3F3F0;color:#6B6B66;font-weight:500;text-align:center;font-size:12px}
+.xl th.xr{position:sticky;left:0;background:#F3F3F0;color:#6B6B66;font-weight:500;text-align:center;font-size:12px;min-width:38px;max-width:none}
+.xl thead th.xr{z-index:2}
+.xl td.num{text-align:right}
+.xl tr.xgap th.xr{border-top:3px double #C9C9C3}
+.xl td:not(.wrap) .tx{white-space:nowrap}

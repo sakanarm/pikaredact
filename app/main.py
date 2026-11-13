@@ -6,6 +6,7 @@ keep counts (never values). LLM base URLs and keys stay on the server.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -18,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -26,6 +27,7 @@ from . import config
 from .detect import gazetteer
 from .detect.llm import Profile, get_profile, list_models, test_connection
 from .docio import SUPPORTED, find_leaks, open_document
+from .docio import pages as pageview
 from .engine import LAYER_LABELS, analyzer, detect, layer_of, models_of, primary_layer
 from .models import ENTITY_TYPES, MODES, Finding
 from .packs import DEFAULT_PACKS, PRESETS, clean_pack_ids, effective_types, law_map, public_packs
@@ -59,6 +61,7 @@ class Job:
     options: dict = field(default_factory=dict)
     files: dict = field(default_factory=dict)   # name -> (bytes, media type), every output made so far
     outputs: dict = field(default_factory=dict)  # "highlight" | "redact" -> export summary (no values, no mapping)
+    pages: dict = field(default_factory=dict)    # page-view key -> PDF bytes (source / previews), newest last
     seconds: float = 0.0
 
 
@@ -364,7 +367,7 @@ def _finding_json(f: Finding) -> dict:
 def get_job(job_id: str):
     j = _job(job_id)
     out = {"id": j.id, "filename": j.filename, "status": j.status, "stage": j.stage, "done": j.done, "total": j.total,
-           "error": j.error, "kind": j.doc.kind, "ext": j.doc.ext, "highlight_ext": getattr(j.doc, "highlight_ext", j.doc.ext),
+           "error": j.error, "kind": j.doc.kind, "page_view": pageview.available(j.doc.kind), "ext": j.doc.ext, "highlight_ext": getattr(j.doc, "highlight_ext", j.doc.ext),
            "created": j.created, "expires": j.created + config.JOB_TTL_SECONDS, "options": {
                k: j.options.get(k) for k in ("use_llm", "profiles", "combine", "layers", "sanitize", "packs", "entities")}}
     if j.status == "done":
@@ -534,6 +537,78 @@ async def export(job_id: str, request: Request):
     }
     j.outputs[action] = summary
     return dict(summary, mapping=mapping)
+
+
+# ---------------------------------------------------------------- page view
+PAGE_CACHE = 6   # PDFs kept per job (source + a few previews); they go with the job after its TTL
+
+
+def _page_pdf(j: Job, what: str, body: dict) -> tuple[str, bytes]:
+    kind = j.doc.kind
+    if what == "source":
+        key, build = "source", (lambda: pageview.to_pdf(kind, j.doc.data))
+    else:
+        chosen, _ = _chosen(j, body)
+        sanitize = bool(body.get("sanitize", j.options.get("sanitize", True)))
+        mode, type_modes = _redact_opts(body)
+        sig = json.dumps([what, [(f.seg_id, f.start, f.end, f.entity_type) for f in chosen], mode, type_modes, sanitize],
+                         ensure_ascii=False, sort_keys=True)
+        key = what[0] + hashlib.sha1(sig.encode("utf-8")).hexdigest()[:20]
+        if what == "highlight":
+            spans: dict = {}
+            for f in chosen:
+                spans.setdefault(f.seg_id, []).append((f.start, f.end))
+            build = lambda: pageview.to_pdf(kind, j.doc.render_highlight(spans)[0])  # noqa: E731
+        else:
+            plan = plan_redaction(chosen, mode, type_modes, seed=_seed(j))
+            build = lambda: pageview.to_pdf(kind, j.doc.render_redacted(plan.edits, sanitize=sanitize)[0])  # noqa: E731
+    pdf = j.pages.get(key)
+    if pdf is None:
+        pdf = build()
+        j.pages[key] = pdf
+        while len(j.pages) > PAGE_CACHE:   # drop the oldest preview, keep the source
+            old = next(k for k in j.pages if k != "source")
+            j.pages.pop(old)
+    return key, pdf
+
+
+@app.post("/api/jobs/{job_id}/pages")
+def pages(job_id: str, body: dict = Body(...)):
+    """Document as pages. what = source (with boxes for `items`) | redact | highlight (the file the export would make)."""
+    j = _job(job_id)
+    if j.status != "done":
+        raise HTTPException(409, "ยังตรวจไม่เสร็จ")
+    what = body.get("what", "source")
+    if what not in ("source", "redact", "highlight"):
+        raise HTTPException(400, "what ต้องเป็น source, redact หรือ highlight")
+    if not pageview.available(j.doc.kind):
+        raise HTTPException(400, "ไฟล์ชนิดนี้แสดงแบบหน้าเอกสารไม่ได้")
+    try:
+        key, pdf = _page_pdf(j, what, body)
+        sizes, total = pageview.page_sizes(pdf)
+        out = {"key": key, "pages": sizes, "total": total}
+        if what == "source":
+            items = [(str(it.get("text", ""))[:300], [str(x)[:40] for x in it.get("ids") or []][:500])
+                     for it in (body.get("items") or [])[:3000] if isinstance(it, dict)]
+            out["boxes"] = pageview.locate(pdf, items)
+    except pageview.PagesUnavailable as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:  # keep it generic: messages may echo document text
+        raise HTTPException(500, f"แสดงหน้าเอกสารไม่สำเร็จ ({type(e).__name__})")
+    return out
+
+
+@app.get("/api/jobs/{job_id}/pages/{key}/{n}.png")
+def page_image(job_id: str, key: str, n: int, w: int = 1100):
+    j = _job(job_id)
+    pdf = j.pages.get(key)
+    if pdf is None:
+        raise HTTPException(404)
+    try:
+        png = pageview.page_png(pdf, n, max(400, min(w, 2000)))
+    except IndexError:
+        raise HTTPException(404)
+    return Response(png, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.get("/api/jobs/{job_id}/files/{name}")

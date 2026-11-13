@@ -169,23 +169,36 @@ def soffice_path() -> str | None:
     return None
 
 
-def convert_legacy(filename: str, data: bytes) -> tuple[str, bytes]:
-    ext = os.path.splitext(filename)[1].lower()
-    target = LEGACY[ext]
+def soffice_convert(ext: str, data: bytes, target: str, timeout: int = 180) -> bytes | None:
+    """Convert bytes of type `ext` to `target` with headless LibreOffice. None when it is missing or fails.
+    Each call gets its own profile folder, so conversions can run side by side."""
     exe = soffice_path()
     if not exe:
-        raise ValueError(f"ไฟล์ {ext} รุ่นเก่ายังเปิดบนเครื่องนี้ไม่ได้ — กรุณาบันทึกเป็น .{target} ก่อนอัปโหลด")
+        return None
     with tempfile.TemporaryDirectory(prefix="pikaredact_") as tmp:
         src = os.path.join(tmp, "input" + ext)
         with open(src, "wb") as fh:
             fh.write(data)
         profile = "file:///" + os.path.join(tmp, "profile").replace("\\", "/").lstrip("/")
-        subprocess.run([exe, f"-env:UserInstallation={profile}", "--headless", "--norestore", "--convert-to", target, "--outdir", tmp, src],
-                       check=False, timeout=180, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        out = os.path.join(tmp, "input." + target)
+        try:
+            subprocess.run([exe, f"-env:UserInstallation={profile}", "--headless", "--norestore", "--convert-to", target,
+                            "--outdir", tmp, src], check=False, timeout=timeout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            return None
+        out = os.path.join(tmp, "input." + target.split(":")[0])
         if not os.path.exists(out):
-            raise ValueError(f"แปลงไฟล์ {ext} ไม่สำเร็จ — กรุณาบันทึกเป็น .{target} ก่อนอัปโหลด")
+            return None
         with open(out, "rb") as fh:
-            converted = fh.read()
+            return fh.read()
+
+
+def convert_legacy(filename: str, data: bytes) -> tuple[str, bytes]:
+    ext = os.path.splitext(filename)[1].lower()
+    target = LEGACY[ext]
+    if not soffice_path():
+        raise ValueError(f"ไฟล์ {ext} รุ่นเก่ายังเปิดบนเครื่องนี้ไม่ได้ — กรุณาบันทึกเป็น .{target} ก่อนอัปโหลด")
+    converted = soffice_convert(ext, data, target)
+    if converted is None:
+        raise ValueError(f"แปลงไฟล์ {ext} ไม่สำเร็จ — กรุณาบันทึกเป็น .{target} ก่อนอัปโหลด")
     base = os.path.splitext(filename)[0]
     return base + "." + target, converted
