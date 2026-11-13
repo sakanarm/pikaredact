@@ -23,9 +23,27 @@ button:focus-visible,a:focus-visible{outline:2px solid #2563EB;outline-offset:2p
 .pii-mark{animation:pop .45s both}
 .scanline{animation:scan 3.6s 1s ease-in-out infinite}
 .float-tag{animation:floaty 6s ease-in-out infinite}
+/* hero: the phrase switches between highlight and each redaction mode, wiped by a scan bar */
+.hv{display:inline-grid;vertical-align:baseline}.hv>span{grid-area:1/1;justify-self:end;opacity:0;filter:blur(8px);transform:translateY(.08em);transition:opacity .5s,filter .5s,transform .5s cubic-bezier(.2,.7,.2,1)}
+.hv>span.on{opacity:1;filter:none;transform:none}
+.pbox{position:relative;display:inline-grid;margin:0 6px;vertical-align:baseline;grid-template-columns:minmax(0,1fr);transition:width .75s cubic-bezier(.65,0,.35,1)}
+.pv .pi{flex:none;white-space:nowrap}
+.pv{grid-area:1/1;display:flex;align-items:center;justify-content:center;clip-path:inset(-20% 100% -20% 0);transition:clip-path .75s cubic-bezier(.65,0,.35,1)}
+.pv.on{clip-path:inset(-20% 0 -20% 0)}.pv.out{clip-path:inset(-20% 0 -20% 100%)}
+.pv[data-m=hl] .pi{background-image:linear-gradient(transparent 56%,#FDE047 56%,#FDE047 92%,transparent 92%);background-repeat:no-repeat;padding:0 6px}
+.pv[data-m=token] .pi{font:600 .52em/1 'IBM Plex Mono',monospace;letter-spacing:0;background:#18181B;color:#FDE047;padding:.32em .45em;border-radius:.22em;box-shadow:0 10px 30px -12px rgba(24,24,27,.6)}
+.pv[data-m=mask] .dots{color:#A1A1AA;font-size:.5em;letter-spacing:.12em;margin-left:.15em;vertical-align:.18em}
+.pv[data-m=remove] .pi{width:5.6em;height:.74em;border-radius:.12em;background:repeating-linear-gradient(135deg,#18181B 0 14px,#27272A 14px 28px)}
+.pv[data-m=fake] .pi{color:#1D4ED8;background-image:linear-gradient(transparent 56%,#DBEAFE 56%,#DBEAFE 92%,transparent 92%);padding:0 6px}
+.sbar{position:absolute;top:4%;bottom:4%;left:0;width:4px;margin-left:-2px;border-radius:4px;background:#FDE047;box-shadow:0 0 18px 4px rgba(253,224,71,.85),0 0 2px #CA8A04;opacity:0;pointer-events:none}
+.sbar.go{animation:scanx .75s cubic-bezier(.65,0,.35,1),scanop .75s linear}
+@keyframes scanx{from{left:0}to{left:100%}}
+@keyframes scanop{0%{opacity:0}12%{opacity:1}85%{opacity:1}100%{opacity:0}}
+.pchip{position:absolute;top:-6px;right:-14px;font:600 12px/1 'IBM Plex Mono',monospace;background:#18181B;color:#FDE047;padding:5px 7px;border-radius:6px;letter-spacing:.04em;white-space:nowrap}
+.pchip.pop{animation:pop .4s both}
 .seg-btn:hover{color:#18181B !important}
 @media (max-width:980px){.float-tag{display:none !important}}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hl-sweep,.pii-mark,.scanline,.float-tag{animation:none}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.pv,.hv>span,.pbox{transition:none}.sbar{display:none}.hl-sweep,.pii-mark,.scanline,.float-tag{animation:none}}
 </style>
 </head>
 <body>
@@ -59,8 +77,8 @@ button:focus-visible,a:focus-visible{outline:2px solid #2563EB;outline-offset:2p
 Proposal · Requirement · Design · Test · Training
 </a>
 
-<h1 style="margin: 28px auto 0; max-width: 1000px; font-size: clamp(40px, 6.2vw, 82px); line-height: 1.16; letter-spacing: -0.025em; font-weight: 700; font-family: Inter, 'IBM Plex Sans Thai', sans-serif">
-ไฮไลต์<span style="position: relative; display: inline-block; margin: 0 6px"><span class="hl-sweep" style="background-image: linear-gradient(transparent 56%, #FDE047 56%, #FDE047 92%, transparent 92%); background-repeat: no-repeat; padding: 0 6px">ข้อมูลส่วนบุคคล</span><span aria-hidden="true" style="position: absolute; top: -6px; right: -14px; font: 600 12px/1 'IBM Plex Mono', monospace; background: #18181B; color: #FDE047; padding: 5px 7px; border-radius: 6px; letter-spacing: .04em">PII</span></span><br>ก่อนเอกสารออกนอกทีม
+<h1 aria-label="ไฮไลต์หรือปิดบังข้อมูลส่วนบุคคล ก่อนเอกสารออกนอกทีม" style="margin: 28px auto 0; max-width: 1000px; font-size: clamp(40px, 6.2vw, 82px); line-height: 1.16; letter-spacing: -0.025em; font-weight: 700; font-family: Inter, 'IBM Plex Sans Thai', sans-serif">
+<span aria-hidden="true"><span class="hv" id="heroVerb"><span class="on">ไฮไลต์</span><span>ปิดบัง</span></span><span class="pbox" id="heroPii"><span class="pv on" data-m="hl"><span class="hl-sweep pi">ข้อมูลส่วนบุคคล</span></span><span class="pv" data-m="token"><span class="pi">[PERSON_1]</span></span><span class="pv" data-m="mask"><span class="pi">ข้อมูล<span class="dots">•••••••</span></span></span><span class="pv" data-m="remove"><span class="pi"></span></span><span class="pv" data-m="fake"><span class="pi">นภา ศรีสมมุติ</span></span><span class="sbar"></span><span class="pchip" id="heroChip">PII</span></span><br>ก่อนเอกสารออกนอกทีม</span>
 </h1>
 
 <p style="margin: 26px auto 0; max-width: 720px; font-size: clamp(16px, 1.6vw, 19px); line-height: 1.75; color: #52525B">

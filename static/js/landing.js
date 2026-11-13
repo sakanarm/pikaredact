@@ -1,3 +1,76 @@
+/* Hero: "ข้อมูลส่วนบุคคล" alternates between the highlight and each redaction mode.
+   A scan bar sweeps left to right while the next mode is wiped in behind it. */
+(() => {
+"use strict";
+const box = document.getElementById("heroPii");
+if (!box || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+const verbs = document.querySelectorAll("#heroVerb > span");
+const chip = document.getElementById("heroChip");
+const bar = box.querySelector(".sbar");
+const pane = (m) => box.querySelector(`.pv[data-m="${m}"]`);
+const CHIP = { hl: "PII", token: "TOKEN · คืนค่าได้", mask: "MASK", remove: "REMOVE", fake: "FAKE DATA" };
+const SEQ = ["hl", "token", "hl", "mask", "hl", "remove", "hl", "fake"];
+const LATIN = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#";
+let i = 0, cur = "hl";
+
+function scramble(el, final, ms) {   // letters settle one by one, left to right, behind the scan bar
+  const t0 = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / ms), n = Math.floor(p * final.length);
+    let out = final.slice(0, n);
+    for (let k = n; k < final.length; k++) out += /[\[\]_ ]/.test(final[k]) ? final[k] : LATIN[(Math.random() * LATIN.length) | 0];
+    el.textContent = out;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+const fit = (m) => {   // the box takes the width of what it shows, so the centred line closes up around it
+  const w = pane(m).querySelector(".pi").getBoundingClientRect().width;
+  if (w) box.style.width = Math.ceil(w) + "px";
+};
+const h1 = box.closest("h1");
+const holdHeight = () => {   // the widest state can take an extra line on phones: keep the page below from jumping
+  h1.style.minHeight = "";
+  h1.style.minHeight = Math.max(h1.getBoundingClientRect().height, holdHeight.tallest || 0) + "px";
+  holdHeight.tallest = parseFloat(h1.style.minHeight);
+};
+holdHeight();
+if (document.fonts) document.fonts.ready.then(() => { if (cur === "hl") { holdHeight.tallest = 0; holdHeight(); } });
+addEventListener("resize", () => {
+  box.style.transition = "none"; fit(cur); void box.offsetWidth; box.style.transition = "";
+  holdHeight.tallest = 0; holdHeight();
+});
+
+function show(next) {
+  const from = pane(cur), to = pane(next);
+  if (!box.style.width) { box.style.width = box.getBoundingClientRect().width + "px"; void box.offsetWidth; }
+  if (next === "token") to.querySelector(".pi").textContent = "[PERSON_1]";   // measure the final text
+  fit(next);
+  from.classList.remove("on");
+  from.classList.add("out");
+  setTimeout(() => from.classList.remove("out"), 800);
+  to.classList.add("on");
+  if (next === "hl") {   // replay the marker sweep
+    const hl = to.querySelector(".hl-sweep");
+    hl.style.animation = "none"; void hl.offsetWidth; hl.style.animation = "";
+  }
+  if (next === "token") scramble(to.querySelector(".pi"), "[PERSON_1]", 900);
+  bar.classList.remove("go"); void bar.offsetWidth; bar.classList.add("go");
+  verbs[0].classList.toggle("on", next === "hl");
+  verbs[1].classList.toggle("on", next !== "hl");
+  chip.textContent = CHIP[next];
+  chip.classList.remove("pop"); void chip.offsetWidth; chip.classList.add("pop");
+  cur = next;
+}
+
+function tick() {
+  if (!document.hidden) { i = (i + 1) % SEQ.length; show(SEQ[i]); }
+  setTimeout(tick, SEQ[i] === "hl" ? 1900 : 2500);
+}
+setTimeout(tick, 2600);   // let the first highlight sweep finish
+})();
+
 /* Landing page: the hero is static HTML; only the demo card (highlight vs. redacted toggle) is a template.
    The sample text is fictional and lives only in this file. */
 (() => {
