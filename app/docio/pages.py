@@ -63,7 +63,15 @@ def _chain(page, parts: list[str], cache: dict) -> list[fitz.Rect]:
     piece starts the following line, left of where the current piece is. Returns one rect per line."""
     def hits(p):
         if p not in cache:
-            cache[p] = page.search_for(p)
+            # one hit can come back as several rects (Thai vowels drawn apart): join pieces on the same line
+            merged: list[fitz.Rect] = []
+            for r in page.search_for(p):
+                last = merged[-1] if merged else None
+                if last is not None and abs(r.y0 - last.y0) < last.height * 0.6 and -2 <= r.x0 - last.x1 <= last.height * 0.6:
+                    merged[-1] = last | r
+                else:
+                    merged.append(fitz.Rect(r))
+            cache[p] = merged
         return cache[p]
 
     def same_line(c, cur, h):
